@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-sans:  'DM Sans', system-ui, sans-serif;
+  --font-mono:  'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 2px; }
+
+.font-serif  { font-family: var(--font-serif) !important; }
+.font-sans   { font-family: var(--font-sans)  !important; }
+.font-mono   { font-family: var(--font-mono)  !important; }
+
+/* Ticker */
+.ticker-track { display: inline-flex; white-space: nowrap; animation: ticker 32s linear infinite; }
+@keyframes ticker { to { transform: translateX(-50%); } }
+
+/* Float */
+@keyframes float { 0%,100%{transform:translateY(0) rotate(var(--r,0deg))} 50%{transform:translateY(-8px) rotate(var(--r,0deg))} }
+.float-anim { animation: float 6s ease-in-out infinite; }
+
+/* Fade up */
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+.fade-up  { animation: fadeUp .6s ease both; }
+.fade-up-1{ animation: fadeUp .6s .1s ease both; }
+.fade-up-2{ animation: fadeUp .6s .2s ease both; }
+.fade-up-3{ animation: fadeUp .6s .3s ease both; }
+.fade-up-4{ animation: fadeUp .6s .4s ease both; }
+
+/* Bounce dots */
+@keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+.bounce-1 { animation: bounce 1.2s .0s infinite; }
+.bounce-2 { animation: bounce 1.2s .2s infinite; }
+.bounce-3 { animation: bounce 1.2s .4s infinite; }
+
+/* Spin */
+@keyframes spinAnim { to { transform: rotate(360deg); } }
+.spin-anim { animation: spinAnim 1s linear infinite; }
+
+/* Streak calendar */
+.streak-done   { background: #b8922a; color: white; }
+.streak-today  { background: #111; color: white; }
+.streak-missed { background: #f2f0ec; color: #999; }
+.streak-future { background: #f8f7f5; color: #ddd; }
+
+/* Chat message animation */
+@keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.msg-in { animation: msgIn .25s ease both; }
+
+/* Smooth hover transitions */
+.hover-lift { transition: transform .2s ease, box-shadow .2s ease; }
+.hover-lift:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.08); }
