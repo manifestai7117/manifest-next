@@ -95,7 +95,7 @@ export default async function HomePage() {
         <div className="hidden md:flex items-center justify-center p-12 overflow-hidden">
           <DraggableCards />
         </div>
-        
+
       {/* TICKER */}
       <div className="bg-[#111] overflow-hidden py-2.5">
         <div className="ticker-track">
