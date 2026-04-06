@@ -1,81 +1,79 @@
 import { NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@/lib/supabase/server'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+import { createAdminClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
   try {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { userId, goalTitle, artTitle, affirmation, coachOpening, todayAction } = await request.json()
 
-    const { messages, goalId } = await request.json()
-
-    // Fetch goal context from database
-    let goalContext = ''
-    if (goalId) {
-      const { data: goal } = await supabase.from('goals').select('*').eq('id', goalId).eq('user_id', user.id).single()
-      if (goal) {
-        goalContext = `
-USER'S GOAL: "${goal.title}"
-CATEGORY: ${goal.category}
-TIMELINE: ${goal.timeline}
-WHY IT MATTERS: ${goal.why}
-PAST OBSTACLES: ${goal.obstacles || 'Not shared'}
-CURRENT STREAK: ${goal.streak} days
-PROGRESS: ${goal.progress}%
-AFFIRMATION: ${goal.affirmation}
-`
-      }
+    // Skip email if Resend not configured
+    const resendKey = process.env.RESEND_API_KEY
+    if (!resendKey || resendKey === 'placeholder') {
+      console.log('Resend not configured — skipping welcome email')
+      return NextResponse.json({ success: true, skipped: true })
     }
 
-    // Fetch recent checkins for context
-    const { data: checkins } = await supabase
-      .from('checkins')
-      .select('note, mood, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(5)
+    const { Resend } = await import('resend')
+    const resend = new Resend(resendKey)
 
-    const checkinContext = checkins?.length
-      ? `\nRECENT CHECK-INS:\n${checkins.map(c => `- ${new Date(c.created_at).toLocaleDateString()}: mood ${c.mood}/5${c.note ? `, note: "${c.note}"` : ''}`).join('\n')}`
-      : ''
+    const supabase = createAdminClient()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', userId)
+      .single()
 
-    const systemPrompt = `You are a direct, warm, expert life coach inside the Manifest app. You have full context about this person's goal.
-${goalContext}${checkinContext}
+    if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-YOUR COACHING STYLE:
-- Be specific — always reference their actual goal, not generic advice
-- Be direct — don't hedge, don't be wishy-washy
-- Be human — sound like a real coach who knows them, not an AI
-- Keep responses to 2-4 sentences unless they ask for more detail
-- End every response with ONE clear question or action
-- Never use bullet points in casual conversation
-- Call out excuses firmly but kindly
-- Celebrate wins specifically
-- If they mention struggling, ask what specifically is blocking them
-- Reference their "why" when motivation drops
-- Reference their streak and progress when relevant`
+    const firstName = profile.full_name?.split(' ')[0] || 'friend'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://manifest-next.vercel.app'
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 500,
-      system: systemPrompt,
-      messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
+    await resend.emails.send({
+      from: `Manifest <${process.env.RESEND_FROM_EMAIL || 'hello@manifestapp.com'}>`,
+      to: profile.email,
+      subject: `${firstName}, your manifest is live ✦`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f8f7f5;font-family:Helvetica,Arial,sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:white;border-radius:20px;overflow:hidden;border:1px solid #e8e8e8;">
+    <div style="background:#111;padding:32px 40px;">
+      <p style="font-size:24px;color:white;margin:0;">manifest<span style="color:#b8922a;">.</span></p>
+    </div>
+    <div style="padding:40px;">
+      <h1 style="font-size:32px;font-weight:400;margin:0 0 8px;line-height:1.2;">Welcome, ${firstName}.</h1>
+      <p style="color:#666;font-size:15px;line-height:1.7;margin:0 0 28px;">Your manifest is live. Here's what we built for you:</p>
+      <div style="background:#f8f7f5;border-radius:12px;padding:20px;margin-bottom:20px;">
+        <p style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#b8922a;margin:0 0 6px;">Your goal</p>
+        <p style="font-size:18px;margin:0;line-height:1.4;">${goalTitle}</p>
+      </div>
+      <div style="background:#1a1a2e;border-radius:12px;padding:24px;margin-bottom:20px;">
+        <p style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(184,146,42,.7);margin:0 0 8px;">Your vision art</p>
+        <p style="font-style:italic;font-size:20px;color:rgba(255,255,255,.9);margin:0 0 8px;">${artTitle}</p>
+        <p style="font-size:13px;color:rgba(255,255,255,.5);margin:0;font-style:italic;">"${affirmation}"</p>
+      </div>
+      <div style="border-left:3px solid #b8922a;padding-left:16px;margin-bottom:24px;">
+        <p style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#999;margin:0 0 8px;">From your coach</p>
+        <p style="font-style:italic;font-size:16px;line-height:1.65;color:#111;margin:0;">"${coachOpening}"</p>
+      </div>
+      <div style="background:#faf3e0;border-radius:12px;padding:18px;margin-bottom:28px;">
+        <p style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#b8922a;margin:0 0 6px;">Do this today</p>
+        <p style="font-size:14px;color:#111;margin:0;line-height:1.6;">${todayAction}</p>
+      </div>
+      <a href="${appUrl}/dashboard" style="display:block;background:#111;color:white;text-align:center;padding:16px;border-radius:12px;text-decoration:none;font-size:14px;font-weight:500;">Open my dashboard →</a>
+    </div>
+    <div style="border-top:1px solid #e8e8e8;padding:24px 40px;text-align:center;">
+      <p style="font-size:12px;color:#999;margin:0;">You're receiving this because you created a Manifest account.</p>
+    </div>
+  </div>
+</body>
+</html>`,
     })
 
-    const reply = message.content[0].type === 'text' ? message.content[0].text : "Tell me more about what's on your mind."
-
-    // Save to database
-    await supabase.from('coach_messages').insert([
-      { goal_id: goalId, user_id: user.id, role: 'user', content: messages[messages.length - 1].content },
-      { goal_id: goalId, user_id: user.id, role: 'assistant', content: reply },
-    ])
-
-    return NextResponse.json({ reply })
+    return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Coach error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Email error:', error)
+    // Don't fail the whole request if email fails
+    return NextResponse.json({ success: true, emailError: error.message })
   }
 }
