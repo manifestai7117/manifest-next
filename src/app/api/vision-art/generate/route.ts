@@ -20,130 +20,139 @@ export async function POST(request: Request) {
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
 
     const falKey = process.env.FAL_KEY
-    if (!falKey) {
-      console.error('FAL_KEY not set')
-      return NextResponse.json({ error: 'FAL_KEY not configured in environment variables' }, { status: 500 })
+    if (!falKey) return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
+
+    // Aesthetic to photography style
+    const aestheticStyle: Record<string, string> = {
+      'Minimal & clean':    'clean minimalist editorial photography, soft diffused natural light, airy white and neutral tones, Kinfolk magazine aesthetic, elegant negative space',
+      'Bold & dark':        'dramatic cinematic photography, deep moody shadows, rich blacks, chiaroscuro lighting, epic and powerful, like a movie poster',
+      'Warm & natural':     'golden hour lifestyle photography, warm amber and terracotta tones, film grain, analog photography feel, emotionally warm and human',
+      'Bright & energetic': 'vibrant editorial photography, bright punchy colors, dynamic composition, Nike campaign quality, electric and aspirational',
+    }
+    const style = aestheticStyle[goal.aesthetic] || aestheticStyle['Bright & energetic']
+
+    // Category-aware symbolic scene — evocative objects and environments, NO people, NO faces
+    const category = (goal.category || '').toLowerCase()
+    const title = (goal.title || '').toLowerCase()
+
+    let sceneIdea = ''
+
+    if (category.includes('health') || category.includes('fitness') || title.includes('marathon') || title.includes('run')) {
+      sceneIdea = 'empty marathon finish line tape glowing in golden morning light, race numbers scattered on the ground, misty stadium in background, a single pair of running shoes'
+    } else if (category.includes('financial') || title.includes('money') || title.includes('wealth') || title.includes('financial freedom')) {
+      sceneIdea = 'a beautifully lit modern desk with an open laptop showing financial charts trending upward, a leather journal, morning coffee, floor to ceiling windows overlooking a city skyline at sunrise'
+    } else if (category.includes('career') || category.includes('business') || title.includes('startup') || title.includes('launch') || title.includes('business')) {
+      sceneIdea = 'a sleek modern office with city views at golden hour, an open notebook with bold handwritten goals, a coffee cup, architectural light and shadow casting dramatic patterns across the desk'
+    } else if (category.includes('creative') || title.includes('write') || title.includes('novel') || title.includes('book') || title.includes('music') || title.includes('art')) {
+      sceneIdea = 'a beautifully arranged writing desk by a rain-streaked window, an open journal with handwritten pages, soft morning light, a vintage typewriter or pen, stacked books with worn spines'
+    } else if (category.includes('travel') || title.includes('travel') || title.includes('italy') || title.includes('europe') || title.includes('trip')) {
+      sceneIdea = 'a cobblestone alley in a European village bathed in golden afternoon light, a vintage scooter parked by an ancient wall draped in bougainvillea, warm sun flares, no people'
+    } else if (category.includes('relationship') || title.includes('love') || title.includes('family') || title.includes('connection')) {
+      sceneIdea = 'two empty chairs on a sunlit porch overlooking a vast landscape, wildflowers in a mason jar, warm golden light, a sense of peace and belonging'
+    } else if (category.includes('learning') || category.includes('education') || title.includes('degree') || title.includes('learn') || title.includes('skill')) {
+      sceneIdea = 'a stack of beautifully curated books on a clean desk beside an open window, morning light streaming in, a fresh cup of coffee, a pen resting on an open notebook'
+    } else if (category.includes('personal') || category.includes('growth') || title.includes('confidence') || title.includes('mindset')) {
+      sceneIdea = 'a single sunlit path through a lush forest opening toward a brilliant horizon, morning mist rising, dew on leaves, a sense of infinite possibility ahead'
+    } else {
+      // Use the AI-generated art description as the scene if it's good
+      sceneIdea = goal.art_description && goal.art_description.length > 30
+        ? goal.art_description
+        : `a stunning scene representing the achievement of ${goal.title}, symbolic and evocative, no people`
     }
 
-    // Build prompt
-    const gender = goal.user_gender && goal.user_gender !== 'Prefer not to say' ? goal.user_gender.toLowerCase() : 'person'
-    const age = goal.user_age_range ? `${goal.user_age_range} year old` : ''
-    const ethnicity = goal.user_ethnicity && goal.user_ethnicity !== 'Prefer not to say' ? goal.user_ethnicity : ''
-    const personDesc = [ethnicity, age, gender].filter(Boolean).join(' ')
+    const prompt = [
+      `Breathtaking ${style}.`,
+      `${sceneIdea}.`,
+      `No people, no faces, no humans, no body parts.`,
+      `Shot on Hasselblad medium format camera.`,
+      `Shallow depth of field, bokeh background.`,
+      `Cinematic color grading, magazine cover quality.`,
+      `Deeply emotional, aspirational, and beautiful.`,
+      `The kind of image that makes you believe anything is possible.`,
+      `Ultra high resolution, award-winning photography.`,
+      `No text, no watermarks, no logos, no borders, no frames.`,
+    ].join(' ')
 
-    const styleMap: Record<string, string> = {
-      'Minimal & clean': 'clean minimal photography, soft natural light, white tones, editorial lifestyle',
-      'Bold & dark': 'dramatic cinematic photography, deep shadows, moody high contrast lighting',
-      'Warm & natural': 'warm golden hour photography, natural earth tones, film grain, lifestyle',
-      'Bright & energetic': 'vibrant editorial photography, bright dynamic lighting, high energy, inspirational',
-    }
-    const styleDesc = styleMap[goal.aesthetic] || styleMap['Bright & energetic']
-    const sceneDesc = goal.art_description || `${personDesc} actively achieving: ${goal.title}`
-    const prompt = `Photorealistic inspirational photograph. ${sceneDesc}. ${styleDesc}. Ultra realistic DSLR photography, 8K, professional color grading, cinematic composition. No text, no watermarks.`
+    const negativePrompt = [
+      'people, person, human, face, body, man, woman, hands, feet, skin',
+      'ugly, deformed, distorted, disfigured',
+      'cartoon, anime, illustration, painting, drawing, sketch, CGI, 3D render',
+      'low quality, blurry, grainy, noisy, pixelated',
+      'text, watermark, logo, signature, border, frame',
+      'dark, gloomy, depressing, horror',
+      'stock photo feel, generic, cheesy, oversaturated',
+    ].join(', ')
 
-    console.log('Calling fal.ai with prompt:', prompt.slice(0, 100))
+    console.log('Generating vision art:', goal.title)
+    console.log('Scene:', sceneIdea.slice(0, 100))
 
-    // Try fal-ai/flux/schnell first, fall back to fal-ai/fast-sdxl
+    // Use flux/dev for best quality
+    const falResponse = await fetch('https://fal.run/fal-ai/flux/dev', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${falKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        negative_prompt: negativePrompt,
+        image_size: 'portrait_4_3',
+        num_inference_steps: 28,
+        guidance_scale: 3.5,
+        num_images: 1,
+        enable_safety_checker: true,
+        output_format: 'jpeg',
+      }),
+      signal: AbortSignal.timeout(90000),
+    })
+
     let imageUrl: string | null = null
-    let lastError = ''
 
-    const endpoints = [
-      {
-        url: 'https://fal.run/fal-ai/flux/schnell',
-        body: {
+    if (falResponse.ok) {
+      const falData = await falResponse.json()
+      imageUrl = falData.images?.[0]?.url || null
+    } else {
+      const errText = await falResponse.text()
+      console.error('flux/dev failed:', falResponse.status, errText.slice(0, 200))
+
+      // Fallback to schnell
+      const fallback = await fetch('https://fal.run/fal-ai/flux/schnell', {
+        method: 'POST',
+        headers: { 'Authorization': `Key ${falKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           prompt,
           image_size: 'portrait_4_3',
-          num_inference_steps: 4,
+          num_inference_steps: 8,
           num_images: 1,
           enable_safety_checker: true,
-        }
-      },
-      {
-        url: 'https://fal.run/fal-ai/flux/dev',
-        body: {
-          prompt,
-          image_size: 'portrait_4_3',
-          num_inference_steps: 28,
-          num_images: 1,
-          enable_safety_checker: true,
-        }
-      },
-      {
-        url: 'https://fal.run/fal-ai/fast-sdxl',
-        body: {
-          prompt,
-          negative_prompt: 'cartoon, illustration, drawing, anime, sketch, text, watermark, logo, ugly, deformed',
-          image_size: 'portrait_4_3',
-          num_inference_steps: 25,
-          num_images: 1,
-        }
+        }),
+        signal: AbortSignal.timeout(60000),
+      })
+      if (!fallback.ok) {
+        const fallbackErr = await fallback.text()
+        return NextResponse.json({ error: 'Image generation failed. Last error: ' + fallbackErr.slice(0, 200) }, { status: 500 })
       }
-    ]
-
-    for (const endpoint of endpoints) {
-      try {
-        console.log('Trying endpoint:', endpoint.url)
-        const falResponse = await fetch(endpoint.url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Key ${falKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(endpoint.body),
-          signal: AbortSignal.timeout(55000), // 55 second timeout
-        })
-
-        const responseText = await falResponse.text()
-        console.log('fal.ai response status:', falResponse.status)
-        console.log('fal.ai response:', responseText.slice(0, 300))
-
-        if (!falResponse.ok) {
-          lastError = `${falResponse.status}: ${responseText}`
-          continue // try next endpoint
-        }
-
-        const falData = JSON.parse(responseText)
-        imageUrl = falData.images?.[0]?.url || falData.image?.url || null
-
-        if (imageUrl) {
-          console.log('Got image URL:', imageUrl.slice(0, 80))
-          break
-        }
-      } catch (endpointError: any) {
-        lastError = endpointError.message
-        console.error('Endpoint error:', endpointError.message)
-        continue
-      }
+      const fallbackData = await fallback.json()
+      imageUrl = fallbackData.images?.[0]?.url || null
     }
 
-    if (!imageUrl) {
-      console.error('All endpoints failed. Last error:', lastError)
-      return NextResponse.json({
-        error: 'Image generation failed. Last error: ' + lastError
-      }, { status: 500 })
-    }
+    if (!imageUrl) return NextResponse.json({ error: 'No image returned' }, { status: 500 })
 
-    // Try to store in Supabase Storage (optional — use fal URL as fallback)
+    // Store in Supabase Storage
     let finalUrl = imageUrl
     try {
-      const imageRes = await fetch(imageUrl)
+      const imageRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) })
       if (imageRes.ok) {
-        const imageBuffer = await imageRes.arrayBuffer()
-        const imagePath = `${user.id}/${goalId}-${Date.now()}.jpg`
-        const { error: uploadError } = await supabase.storage
-          .from('vision-art')
-          .upload(imagePath, imageBuffer, { contentType: 'image/jpeg', upsert: true })
-
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabase.storage.from('vision-art').getPublicUrl(imagePath)
+        const buf = await imageRes.arrayBuffer()
+        const path = `${user.id}/${goalId}-${Date.now()}.jpg`
+        const { error: upErr } = await supabase.storage.from('vision-art').upload(path, buf, { contentType: 'image/jpeg', upsert: true })
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from('vision-art').getPublicUrl(path)
           finalUrl = publicUrl
         }
       }
-    } catch (storageError) {
-      console.log('Storage upload failed, using fal URL directly:', storageError)
-    }
+    } catch { /* use fal URL as fallback */ }
 
-    // Save to database
     await supabase.from('goals').update({
       art_image_url: finalUrl,
       vision_board_last_generated: new Date().toISOString(),
@@ -152,7 +161,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ imageUrl: finalUrl })
   } catch (error: any) {
-    console.error('Vision art generation error:', error)
+    console.error('Vision art error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
