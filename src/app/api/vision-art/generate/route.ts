@@ -19,89 +19,131 @@ export async function POST(request: Request) {
 
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
 
-    // Check 24h cooldown
-    if (goal.vision_board_last_generated) {
-      const hoursSince = (Date.now() - new Date(goal.vision_board_last_generated).getTime()) / 3600000
-      if (hoursSince < 24) {
-        return NextResponse.json({
-          error: `Available in ${Math.ceil(24 - hoursSince)} hours`,
-          hoursLeft: Math.ceil(24 - hoursSince)
-        }, { status: 429 })
-      }
+    const falKey = process.env.FAL_KEY
+    if (!falKey) {
+      console.error('FAL_KEY not set')
+      return NextResponse.json({ error: 'FAL_KEY not configured in environment variables' }, { status: 500 })
     }
 
-    const falKey = process.env.FAL_KEY
-    if (!falKey) return NextResponse.json({ error: 'Image generation not configured' }, { status: 500 })
-
-    // Build a vivid, photorealistic prompt
+    // Build prompt
     const gender = goal.user_gender && goal.user_gender !== 'Prefer not to say' ? goal.user_gender.toLowerCase() : 'person'
     const age = goal.user_age_range ? `${goal.user_age_range} year old` : ''
     const ethnicity = goal.user_ethnicity && goal.user_ethnicity !== 'Prefer not to say' ? goal.user_ethnicity : ''
     const personDesc = [ethnicity, age, gender].filter(Boolean).join(' ')
 
-    const aesthetic = goal.aesthetic || 'Bright & energetic'
     const styleMap: Record<string, string> = {
-      'Minimal & clean': 'clean minimal photography, soft natural light, white background, editorial style',
-      'Bold & dark': 'dramatic cinematic photography, deep shadows, moody lighting, high contrast',
-      'Warm & natural': 'warm golden hour photography, natural tones, film grain, lifestyle photography',
-      'Bright & energetic': 'vibrant editorial photography, dynamic composition, bright natural light, inspirational',
+      'Minimal & clean': 'clean minimal photography, soft natural light, white tones, editorial lifestyle',
+      'Bold & dark': 'dramatic cinematic photography, deep shadows, moody high contrast lighting',
+      'Warm & natural': 'warm golden hour photography, natural earth tones, film grain, lifestyle',
+      'Bright & energetic': 'vibrant editorial photography, bright dynamic lighting, high energy, inspirational',
     }
-    const styleDesc = styleMap[aesthetic] || styleMap['Bright & energetic']
+    const styleDesc = styleMap[goal.aesthetic] || styleMap['Bright & energetic']
+    const sceneDesc = goal.art_description || `${personDesc} actively achieving: ${goal.title}`
+    const prompt = `Photorealistic inspirational photograph. ${sceneDesc}. ${styleDesc}. Ultra realistic DSLR photography, 8K, professional color grading, cinematic composition. No text, no watermarks.`
 
-    // Use the AI-generated art description if available, otherwise build from goal
-    const sceneDesc = goal.art_description || goal.vision_art_prompt || `${personDesc} achieving: ${goal.title}`
+    console.log('Calling fal.ai with prompt:', prompt.slice(0, 100))
 
-    const prompt = `Professional inspirational photograph. ${sceneDesc}. ${styleDesc}. The subject is a ${personDesc}. Ultra realistic, high quality DSLR photography, 8K resolution, shallow depth of field, professional color grading. No text, no watermarks, no logos.`
+    // Try fal-ai/flux/schnell first, fall back to fal-ai/fast-sdxl
+    let imageUrl: string | null = null
+    let lastError = ''
 
-    const negativePrompt = 'cartoon, illustration, drawing, anime, sketch, painting, CGI, 3D render, low quality, blurry, distorted, text, watermark, logo, ugly, deformed, stick figure, clipart'
-
-    // Call fal.ai flux model
-    const falResponse = await fetch('https://fal.run/fal-ai/flux/schnell', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${falKey}`,
-        'Content-Type': 'application/json',
+    const endpoints = [
+      {
+        url: 'https://fal.run/fal-ai/flux/schnell',
+        body: {
+          prompt,
+          image_size: 'portrait_4_3',
+          num_inference_steps: 4,
+          num_images: 1,
+          enable_safety_checker: true,
+        }
       },
-      body: JSON.stringify({
-        prompt,
-        negative_prompt: negativePrompt,
-        image_size: 'portrait_4_3',
-        num_inference_steps: 4,
-        num_images: 1,
-        enable_safety_checker: true,
-      })
-    })
+      {
+        url: 'https://fal.run/fal-ai/flux/dev',
+        body: {
+          prompt,
+          image_size: 'portrait_4_3',
+          num_inference_steps: 28,
+          num_images: 1,
+          enable_safety_checker: true,
+        }
+      },
+      {
+        url: 'https://fal.run/fal-ai/fast-sdxl',
+        body: {
+          prompt,
+          negative_prompt: 'cartoon, illustration, drawing, anime, sketch, text, watermark, logo, ugly, deformed',
+          image_size: 'portrait_4_3',
+          num_inference_steps: 25,
+          num_images: 1,
+        }
+      }
+    ]
 
-    if (!falResponse.ok) {
-      const err = await falResponse.text()
-      console.error('fal.ai error:', err)
-      return NextResponse.json({ error: 'Image generation failed' }, { status: 500 })
+    for (const endpoint of endpoints) {
+      try {
+        console.log('Trying endpoint:', endpoint.url)
+        const falResponse = await fetch(endpoint.url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Key ${falKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(endpoint.body),
+          signal: AbortSignal.timeout(55000), // 55 second timeout
+        })
+
+        const responseText = await falResponse.text()
+        console.log('fal.ai response status:', falResponse.status)
+        console.log('fal.ai response:', responseText.slice(0, 300))
+
+        if (!falResponse.ok) {
+          lastError = `${falResponse.status}: ${responseText}`
+          continue // try next endpoint
+        }
+
+        const falData = JSON.parse(responseText)
+        imageUrl = falData.images?.[0]?.url || falData.image?.url || null
+
+        if (imageUrl) {
+          console.log('Got image URL:', imageUrl.slice(0, 80))
+          break
+        }
+      } catch (endpointError: any) {
+        lastError = endpointError.message
+        console.error('Endpoint error:', endpointError.message)
+        continue
+      }
     }
 
-    const falData = await falResponse.json()
-    const imageUrl = falData.images?.[0]?.url
-
-    if (!imageUrl) return NextResponse.json({ error: 'No image returned' }, { status: 500 })
-
-    // Download and store in Supabase Storage for persistence
-    const imageRes = await fetch(imageUrl)
-    const imageBuffer = await imageRes.arrayBuffer()
-    const imagePath = `vision-art/${user.id}/${goalId}-${Date.now()}.jpg`
-
-    const { error: uploadError } = await supabase.storage
-      .from('vision-art')
-      .upload(imagePath, imageBuffer, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      })
-
-    let finalUrl = imageUrl // fallback to fal URL if storage fails
-    if (!uploadError) {
-      const { data: { publicUrl } } = supabase.storage.from('vision-art').getPublicUrl(imagePath)
-      finalUrl = publicUrl
+    if (!imageUrl) {
+      console.error('All endpoints failed. Last error:', lastError)
+      return NextResponse.json({
+        error: 'Image generation failed. Last error: ' + lastError
+      }, { status: 500 })
     }
 
-    // Update goal with new image URL
+    // Try to store in Supabase Storage (optional — use fal URL as fallback)
+    let finalUrl = imageUrl
+    try {
+      const imageRes = await fetch(imageUrl)
+      if (imageRes.ok) {
+        const imageBuffer = await imageRes.arrayBuffer()
+        const imagePath = `${user.id}/${goalId}-${Date.now()}.jpg`
+        const { error: uploadError } = await supabase.storage
+          .from('vision-art')
+          .upload(imagePath, imageBuffer, { contentType: 'image/jpeg', upsert: true })
+
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from('vision-art').getPublicUrl(imagePath)
+          finalUrl = publicUrl
+        }
+      }
+    } catch (storageError) {
+      console.log('Storage upload failed, using fal URL directly:', storageError)
+    }
+
+    // Save to database
     await supabase.from('goals').update({
       art_image_url: finalUrl,
       vision_board_last_generated: new Date().toISOString(),
@@ -110,7 +152,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ imageUrl: finalUrl })
   } catch (error: any) {
-    console.error('Vision art error:', error)
+    console.error('Vision art generation error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
