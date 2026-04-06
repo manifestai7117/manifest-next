@@ -22,71 +22,71 @@ export async function POST(request: Request) {
     const falKey = process.env.FAL_KEY
     if (!falKey) return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
 
-    // Aesthetic to photography style
     const aestheticStyle: Record<string, string> = {
-      'Minimal & clean':    'clean minimalist editorial photography, soft diffused natural light, airy white and neutral tones, Kinfolk magazine aesthetic, elegant negative space',
-      'Bold & dark':        'dramatic cinematic photography, deep moody shadows, rich blacks, chiaroscuro lighting, epic and powerful, like a movie poster',
-      'Warm & natural':     'golden hour lifestyle photography, warm amber and terracotta tones, film grain, analog photography feel, emotionally warm and human',
-      'Bright & energetic': 'vibrant editorial photography, bright punchy colors, dynamic composition, Nike campaign quality, electric and aspirational',
+      'Minimal & clean':    'Kinfolk magazine editorial photography, soft diffused light, clean neutral tones, elegant and minimal',
+      'Bold & dark':        'dramatic cinematic photography, rich shadows, moody and powerful, like a Christopher Nolan film still',
+      'Warm & natural':     'golden hour photography, warm amber tones, analog film grain, emotionally resonant, National Geographic quality',
+      'Bright & energetic': 'vibrant Nike campaign photography, punchy colors, dynamic motion blur, electric energy, aspirational',
     }
     const style = aestheticStyle[goal.aesthetic] || aestheticStyle['Bright & energetic']
 
-    // Category-aware symbolic scene — evocative objects and environments, NO people, NO faces
     const category = (goal.category || '').toLowerCase()
     const title = (goal.title || '').toLowerCase()
 
-    let sceneIdea = ''
+    // Scenes: people allowed but NEVER showing faces — silhouettes, backs, side profiles, hands, feet
+    // No text, no numbers, no words in the image
+    let scene = ''
 
-    if (category.includes('health') || category.includes('fitness') || title.includes('marathon') || title.includes('run')) {
-      sceneIdea = 'empty marathon finish line tape glowing in golden morning light, race numbers scattered on the ground, misty stadium in background, a single pair of running shoes'
-    } else if (category.includes('financial') || title.includes('money') || title.includes('wealth') || title.includes('financial freedom')) {
-      sceneIdea = 'a beautifully lit modern desk with an open laptop showing financial charts trending upward, a leather journal, morning coffee, floor to ceiling windows overlooking a city skyline at sunrise'
-    } else if (category.includes('career') || category.includes('business') || title.includes('startup') || title.includes('launch') || title.includes('business')) {
-      sceneIdea = 'a sleek modern office with city views at golden hour, an open notebook with bold handwritten goals, a coffee cup, architectural light and shadow casting dramatic patterns across the desk'
-    } else if (category.includes('creative') || title.includes('write') || title.includes('novel') || title.includes('book') || title.includes('music') || title.includes('art')) {
-      sceneIdea = 'a beautifully arranged writing desk by a rain-streaked window, an open journal with handwritten pages, soft morning light, a vintage typewriter or pen, stacked books with worn spines'
-    } else if (category.includes('travel') || title.includes('travel') || title.includes('italy') || title.includes('europe') || title.includes('trip')) {
-      sceneIdea = 'a cobblestone alley in a European village bathed in golden afternoon light, a vintage scooter parked by an ancient wall draped in bougainvillea, warm sun flares, no people'
-    } else if (category.includes('relationship') || title.includes('love') || title.includes('family') || title.includes('connection')) {
-      sceneIdea = 'two empty chairs on a sunlit porch overlooking a vast landscape, wildflowers in a mason jar, warm golden light, a sense of peace and belonging'
-    } else if (category.includes('learning') || category.includes('education') || title.includes('degree') || title.includes('learn') || title.includes('skill')) {
-      sceneIdea = 'a stack of beautifully curated books on a clean desk beside an open window, morning light streaming in, a fresh cup of coffee, a pen resting on an open notebook'
-    } else if (category.includes('personal') || category.includes('growth') || title.includes('confidence') || title.includes('mindset')) {
-      sceneIdea = 'a single sunlit path through a lush forest opening toward a brilliant horizon, morning mist rising, dew on leaves, a sense of infinite possibility ahead'
+    if (category.includes('health') || category.includes('fitness') || title.includes('marathon') || title.includes('run') || title.includes('gym') || title.includes('weight')) {
+      scene = 'a lone runner silhouetted against a blazing sunrise at the finish line of a marathon, arms outstretched in victory, motion blur on the legs, golden mist rising from the track, shot from behind at ground level, cinematic and emotional'
+    } else if (category.includes('financial') || title.includes('money') || title.includes('wealth') || title.includes('invest') || title.includes('save') || title.includes('financial')) {
+      scene = 'hands holding a small plant growing from a pile of soil on a clean white surface, morning light streaming through a window casting long shadows, shallow depth of field, symbolizing growth and abundance'
+    } else if (category.includes('career') || category.includes('business') || title.includes('startup') || title.includes('launch') || title.includes('business') || title.includes('app')) {
+      scene = 'a person in a sharp suit standing at floor-to-ceiling windows of a high-rise office, back to camera, overlooking a glowing city at golden hour, arms relaxed at sides, silhouette bathed in warm amber light'
+    } else if (title.includes('write') || title.includes('novel') || title.includes('book') || title.includes('author')) {
+      scene = 'hands typing on a vintage typewriter on a wooden desk beside a rain-streaked window, morning light, a steaming coffee cup, stacked books in soft focus background, cozy and creative atmosphere'
+    } else if (category.includes('creative') || title.includes('music') || title.includes('sing') || title.includes('paint') || title.includes('art')) {
+      scene = 'a musician silhouetted on a stage, back to the audience, spotlight cutting through dramatic smoke, crowd of blurred lights stretching into the distance, concert photography, powerful and dreamlike'
+    } else if (category.includes('travel') || title.includes('travel') || title.includes('italy') || title.includes('europe') || title.includes('trip') || title.includes('visit')) {
+      scene = 'a solo traveler standing at the edge of a sun-drenched cliff overlooking a turquoise Mediterranean sea, back to camera, light summer clothes billowing gently in the breeze, total freedom and wanderlust'
+    } else if (category.includes('relationship') || title.includes('love') || title.includes('family') || title.includes('friend')) {
+      scene = 'two silhouettes sitting together on a hilltop watching a breathtaking sunset, warm golden light, wildflowers in foreground, shot from behind, radiating peace love and connection'
+    } else if (category.includes('learning') || category.includes('education') || title.includes('degree') || title.includes('learn') || title.includes('study')) {
+      scene = 'a student silhouette in a beautiful library, back to camera, reaching for a book on a tall shelf, warm amber library light, rows of books stretching endlessly, dust particles in the light beams'
+    } else if (category.includes('personal') || category.includes('growth') || title.includes('confidence') || title.includes('mindset') || title.includes('meditation')) {
+      scene = 'a lone person sitting in meditation on a mountain summit at sunrise, back to camera, arms resting on knees, vast misty valley below, rays of sun breaking through clouds, transcendent and peaceful'
     } else {
-      // Use the AI-generated art description as the scene if it's good
-      sceneIdea = goal.art_description && goal.art_description.length > 30
-        ? goal.art_description
-        : `a stunning scene representing the achievement of ${goal.title}, symbolic and evocative, no people`
+      // Use the AI art description but strip any face/text references
+      const artDesc = goal.art_description || ''
+      scene = artDesc.length > 30
+        ? `${artDesc} — shot from behind or as a silhouette, no faces visible, dreamlike and cinematic`
+        : `a person silhouetted against a breathtaking landscape that symbolizes achieving ${goal.title}, back to camera, golden hour light, vast and inspiring`
     }
 
     const prompt = [
       `Breathtaking ${style}.`,
-      `${sceneIdea}.`,
-      `No people, no faces, no humans, no body parts.`,
-      `Shot on Hasselblad medium format camera.`,
-      `Shallow depth of field, bokeh background.`,
-      `Cinematic color grading, magazine cover quality.`,
-      `Deeply emotional, aspirational, and beautiful.`,
-      `The kind of image that makes you believe anything is possible.`,
-      `Ultra high resolution, award-winning photography.`,
-      `No text, no watermarks, no logos, no borders, no frames.`,
+      `${scene}.`,
+      `Hyper-realistic photography, shot on Hasselblad H6D, 50mm lens, f/1.4 aperture, shallow depth of field.`,
+      `Cinematic color grading, film quality.`,
+      `No faces visible — subject seen from behind, silhouetted, or in profile only.`,
+      `No text, no letters, no numbers, no words anywhere in the image.`,
+      `Deeply emotional, motivational, and dreamlike.`,
+      `The kind of image that makes you feel you can achieve anything.`,
+      `Award-winning photography, 8K resolution.`,
     ].join(' ')
 
     const negativePrompt = [
-      'people, person, human, face, body, man, woman, hands, feet, skin',
-      'ugly, deformed, distorted, disfigured',
-      'cartoon, anime, illustration, painting, drawing, sketch, CGI, 3D render',
-      'low quality, blurry, grainy, noisy, pixelated',
-      'text, watermark, logo, signature, border, frame',
-      'dark, gloomy, depressing, horror',
-      'stock photo feel, generic, cheesy, oversaturated',
+      'face, faces, portrait, looking at camera, frontal view',
+      'text, letters, words, numbers, signs, labels, captions, watermark, logo',
+      'ugly, deformed, distorted, bad anatomy',
+      'cartoon, anime, illustration, painting, CGI, 3D render, sketch',
+      'low quality, blurry, grainy, pixelated, noisy',
+      'dark, gloomy, depressing, scary, horror',
+      'stock photo, generic, cheesy',
     ].join(', ')
 
-    console.log('Generating vision art:', goal.title)
-    console.log('Scene:', sceneIdea.slice(0, 100))
+    console.log('Generating vision art for:', goal.title)
 
-    // Use flux/dev for best quality
     const falResponse = await fetch('https://fal.run/fal-ai/flux/dev', {
       method: 'POST',
       headers: {
@@ -97,8 +97,8 @@ export async function POST(request: Request) {
         prompt,
         negative_prompt: negativePrompt,
         image_size: 'portrait_4_3',
-        num_inference_steps: 28,
-        guidance_scale: 3.5,
+        num_inference_steps: 35,
+        guidance_scale: 4.0,
         num_images: 1,
         enable_safety_checker: true,
         output_format: 'jpeg',
@@ -111,9 +111,10 @@ export async function POST(request: Request) {
     if (falResponse.ok) {
       const falData = await falResponse.json()
       imageUrl = falData.images?.[0]?.url || null
+      console.log('flux/dev succeeded')
     } else {
       const errText = await falResponse.text()
-      console.error('flux/dev failed:', falResponse.status, errText.slice(0, 200))
+      console.error('flux/dev failed:', falResponse.status, errText.slice(0, 300))
 
       // Fallback to schnell
       const fallback = await fetch('https://fal.run/fal-ai/flux/schnell', {
@@ -129,11 +130,12 @@ export async function POST(request: Request) {
         signal: AbortSignal.timeout(60000),
       })
       if (!fallback.ok) {
-        const fallbackErr = await fallback.text()
-        return NextResponse.json({ error: 'Image generation failed. Last error: ' + fallbackErr.slice(0, 200) }, { status: 500 })
+        const fbErr = await fallback.text()
+        return NextResponse.json({ error: 'Image generation failed: ' + fbErr.slice(0, 200) }, { status: 500 })
       }
-      const fallbackData = await fallback.json()
-      imageUrl = fallbackData.images?.[0]?.url || null
+      const fbData = await fallback.json()
+      imageUrl = fbData.images?.[0]?.url || null
+      console.log('flux/schnell fallback succeeded')
     }
 
     if (!imageUrl) return NextResponse.json({ error: 'No image returned' }, { status: 500 })
@@ -141,17 +143,19 @@ export async function POST(request: Request) {
     // Store in Supabase Storage
     let finalUrl = imageUrl
     try {
-      const imageRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) })
-      if (imageRes.ok) {
-        const buf = await imageRes.arrayBuffer()
+      const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) })
+      if (imgRes.ok) {
+        const buf = await imgRes.arrayBuffer()
         const path = `${user.id}/${goalId}-${Date.now()}.jpg`
-        const { error: upErr } = await supabase.storage.from('vision-art').upload(path, buf, { contentType: 'image/jpeg', upsert: true })
+        const { error: upErr } = await supabase.storage
+          .from('vision-art')
+          .upload(path, buf, { contentType: 'image/jpeg', upsert: true })
         if (!upErr) {
           const { data: { publicUrl } } = supabase.storage.from('vision-art').getPublicUrl(path)
           finalUrl = publicUrl
         }
       }
-    } catch { /* use fal URL as fallback */ }
+    } catch { /* use fal URL */ }
 
     await supabase.from('goals').update({
       art_image_url: finalUrl,
