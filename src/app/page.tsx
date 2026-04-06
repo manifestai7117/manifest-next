@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import DraggableCards from '@/components/landing/DraggableCards'
 
 const HERO_CARDS = [
   { src:'photo-1571019613454-1cb2f99b2d8b', name:'James T.', goal:'Completed first marathon', badge:'3:52 finish', rot:-3, delay:'0s', pos:{top:10,left:10}, w:250, h:320 },
@@ -90,38 +91,11 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Draggable hero cards */}
-        <div className="hidden md:flex items-center justify-center p-12 overflow-hidden" id="hero-cards">
-          <div className="relative w-[380px] h-[480px]" id="card-stack">
-            {HERO_CARDS.map((p,i)=>(
-              <div key={i} id={`hcard-${i}`}
-                className="absolute rounded-2xl overflow-hidden shadow-2xl float-anim cursor-grab active:cursor-grabbing select-none"
-                style={{
-                  width:p.w, height:p.h, ...p.pos,
-                  '--r':`${p.rot}deg`, transform:`rotate(${p.rot}deg)`,
-                  animationDelay:p.delay, zIndex:3-i, touchAction:'none'
-                } as any}
-                onMouseDown={(e)=>{
-                  const el = e.currentTarget
-                  const rect = el.getBoundingClientRect()
-                  const dx = e.clientX-rect.left, dy = e.clientY-rect.top
-                  el.style.zIndex='10'; el.style.transform='rotate(0deg)'; el.style.animation='none'
-                  const move = (ev:MouseEvent) => { el.style.left=(ev.clientX-dx-el.parentElement!.getBoundingClientRect().left)+'px'; el.style.top=(ev.clientY-dy-el.parentElement!.getBoundingClientRect().top)+'px'; el.style.right='auto'; el.style.bottom='auto' }
-                  const up = () => { el.style.zIndex=String(3-i); el.style.transform=`rotate(${p.rot}deg)`; el.style.animation=''; document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up) }
-                  document.addEventListener('mousemove',move); document.addEventListener('mouseup',up)
-                }}>
-                <img src={`https://images.unsplash.com/${p.src}?w=400&h=500&fit=crop&crop=top`} alt="" className="w-full h-full object-cover pointer-events-none"/>
-                <div className="absolute bottom-3 left-3 right-3 bg-white/92 backdrop-blur-sm rounded-xl p-2.5 pointer-events-none">
-                  <p className="text-[13px] font-medium">{p.name}</p>
-                  <p className="text-[11px] text-[#666]">{p.goal}</p>
-                  <span className="inline-block mt-1 text-[10px] font-medium text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full">{p.badge}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Draggable hero cards */}
+        <div className="hidden md:flex items-center justify-center p-12 overflow-hidden">
+          <DraggableCards />
         </div>
-      </div>
-
+        
       {/* TICKER */}
       <div className="bg-[#111] overflow-hidden py-2.5">
         <div className="ticker-track">
