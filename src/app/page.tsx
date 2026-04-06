@@ -3,9 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import DraggableCards from '@/components/landing/DraggableCards'
 
 const HERO_CARDS = [
-  { src:'photo-1571019613454-1cb2f99b2d8b', name:'James T.', goal:'Completed first marathon', badge:'3:52 finish', rot:-3, delay:'0s', pos:{top:10,left:10}, w:250, h:320 },
-  { src:'photo-1573496359142-b8d87734a5a2', name:'Ariana M.', goal:'Launched her brand', badge:'$10k first month', rot:2.5, delay:'0.4s', pos:{top:30,right:0}, w:230, h:290 },
-  { src:'photo-1500648767791-00dcc994a43e', name:'Marcus L.', goal:'Saved first $50k', badge:'4 months early', rot:1, delay:'0.8s', pos:{bottom:10,left:60}, w:210, h:260 },
+  { src:'photo-1571019613454-1cb2f99b2d8b' },
+  { src:'photo-1573496359142-b8d87734a5a2' },
+  { src:'photo-1500648767791-00dcc994a43e' },
 ]
 
 async function getPublicData() {
@@ -36,6 +36,7 @@ export default async function HomePage() {
 
   return (
     <div className="bg-white">
+
       {/* NAV */}
       <nav className="sticky top-0 z-50 flex items-center justify-between px-12 h-16 bg-white/95 backdrop-blur-sm border-b border-[#e8e8e8]">
         <span className="font-serif text-[22px] text-[#111]">manifest<span className="text-[#b8922a]">.</span></span>
@@ -59,27 +60,29 @@ export default async function HomePage() {
         </div>
       </nav>
 
-      {/* HERO */}
+      {/* HERO — 2 col grid */}
       <div className="max-w-[1240px] mx-auto grid md:grid-cols-2 min-h-[calc(100vh-64px)]">
+
+        {/* Left col */}
         <div className="flex flex-col justify-center px-12 py-16 border-r border-[#e8e8e8]">
-          <p className="text-[11px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-4 fade-up">Goal achievement, reimagined</p>
-          <h1 className="font-serif text-[clamp(42px,5vw,68px)] leading-[1.07] tracking-[-0.02em] mb-5 fade-up-1">
+          <p className="text-[11px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-4">Goal achievement, reimagined</p>
+          <h1 className="font-serif text-[clamp(42px,5vw,68px)] leading-[1.07] tracking-[-0.02em] mb-5">
             Turn your goals<br/>into <em className="italic text-[#b8922a]">lived</em> reality
           </h1>
-          <p className="text-[16px] text-[#666] leading-[1.75] max-w-[440px] mb-8 fade-up-2">
+          <p className="text-[16px] text-[#666] leading-[1.75] max-w-[440px] mb-8">
             Manifest pairs AI-generated vision art with daily coaching and real accountability — so your goals stop being wishes and start becoming your life.
           </p>
-          <div className="flex gap-3 mb-10 fade-up-3">
+          <div className="flex gap-3 mb-10">
             {user ? (
-              <Link href="/dashboard" className="px-7 py-3.5 bg-[#b8922a] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#9a7820] transition-all hover:-translate-y-px">Continue my journey →</Link>
+              <Link href="/dashboard" className="px-7 py-3.5 bg-[#b8922a] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#9a7820] transition-all">Continue my journey →</Link>
             ) : (
               <>
-                <Link href="/auth/signup" className="px-7 py-3.5 bg-[#111] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#2a2a2a] transition-all hover:-translate-y-px">Create your vision — free</Link>
+                <Link href="/auth/signup" className="px-7 py-3.5 bg-[#111] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#2a2a2a] transition-all">Create your vision — free</Link>
                 <a href="#how" className="px-7 py-3.5 border border-[#d0d0d0] rounded-[14px] font-medium text-[15px] hover:bg-[#f8f7f5] transition-colors">See how it works</a>
               </>
             )}
           </div>
-          <div className="flex items-center gap-4 fade-up-4">
+          <div className="flex items-center gap-4">
             <div className="flex">
               {['photo-1507003211169-0a1dd7228f2d','photo-1494790108755-2616b612b786','photo-1438761681033-6461ffad8d80','photo-1472099645785-5658abf4ff4e'].map((id,i)=>(
                 <div key={i} className="w-8 h-8 rounded-full border-2 border-white overflow-hidden" style={{marginLeft:i>0?-8:0}}>
@@ -91,10 +94,12 @@ export default async function HomePage() {
           </div>
         </div>
 
-      {/* Draggable hero cards */}
+        {/* Right col — draggable cards (client component) */}
         <div className="hidden md:flex items-center justify-center p-12 overflow-hidden">
           <DraggableCards />
         </div>
+
+      </div>{/* end hero grid */}
 
       {/* TICKER */}
       <div className="bg-[#111] overflow-hidden py-2.5">
@@ -118,7 +123,7 @@ export default async function HomePage() {
               {n:'01',title:'Tell us your goal & who you are',desc:'A guided intake — your why, timeline, motivators, coaching style, and appearance for personalized vision art. Not generic. Built for you.'},
               {n:'02',title:'Get vision art that shows YOU winning',desc:'AI generates art showing a person who looks like you actively achieving your goal. Beautiful enough to frame, specific enough to move you daily.'},
               {n:'03',title:'Work with a coach that knows everything',desc:'Your coach knows your goal, your timeline, your why, your patterns. It tracks when you change timelines and adapts instantly.'},
-              {n:'04',title:'Build momentum that compounds',desc:'Daily streaks, phase milestones, rewards, goal circles with ranking — every day you show up builds toward the person you\'re becoming.'},
+              {n:'04',title:'Build momentum that compounds',desc:"Daily streaks, phase milestones, rewards, goal circles with ranking — every day you show up builds toward the person you're becoming."},
             ].map(h=>(
               <div key={h.n} className="bg-white p-10 hover:bg-[#f8f7f5] transition-colors">
                 <div className="font-serif text-5xl text-[#faf3e0] leading-none mb-4">{h.n}</div>
@@ -130,7 +135,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* STORIES — dynamic */}
+      {/* STORIES */}
       <section id="stories" className="py-24 px-12">
         <div className="max-w-[1240px] mx-auto">
           <div className="flex justify-between items-end flex-wrap gap-6 mb-14">
@@ -151,12 +156,12 @@ export default async function HomePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {displayStories.slice(0,3).map((s:any,i:number)=>(
-              <div key={i} className="border border-[#e8e8e8] rounded-2xl overflow-hidden hover-lift">
+              <div key={i} className="border border-[#e8e8e8] rounded-2xl overflow-hidden">
                 <div className="h-[190px] overflow-hidden">
-                  <img src={`https://images.unsplash.com/${HERO_CARDS[i%3]?.src}?w=600&h=380&fit=crop&crop=top`} alt="" className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"/>
+                  <img src={`https://images.unsplash.com/${HERO_CARDS[i%3]?.src}?w=600&h=380&fit=crop&crop=top`} alt="" className="w-full h-full object-cover"/>
                 </div>
                 <div className="p-5">
-                  <p className="font-serif italic text-[15px] leading-[1.65] mb-4">"{s.quote}"</p>
+                  <p className="font-serif italic text-[15px] leading-[1.65] mb-4">&ldquo;{s.quote}&rdquo;</p>
                   <div className="flex items-center gap-3 border-t border-[#e8e8e8] pt-4">
                     {s.profiles?.avatar_url ? (
                       <img src={s.profiles.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0"/>
@@ -213,7 +218,7 @@ export default async function HomePage() {
       <section className="py-24 px-12 bg-[#111] text-center">
         <h2 className="font-serif text-[clamp(36px,4.5vw,64px)] leading-[1.07] tracking-[-0.02em] text-white mb-4">Your future self is<br/><em className="italic text-[#b8922a]">already waiting.</em></h2>
         <p className="text-[16px] text-white/40 mb-8">Start free. No credit card. 5 minutes.</p>
-        <Link href={user?'/dashboard':'/auth/signup'} className="inline-block px-8 py-4 bg-[#b8922a] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#9a7820] transition-all hover:-translate-y-px">
+        <Link href={user?'/dashboard':'/auth/signup'} className="inline-block px-8 py-4 bg-[#b8922a] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#9a7820] transition-all">
           {user?'Continue my journey →':'Create my vision now →'}
         </Link>
       </section>
@@ -223,9 +228,13 @@ export default async function HomePage() {
         <div className="max-w-[1240px] mx-auto grid grid-cols-2 md:grid-cols-4 gap-12 mb-12">
           <div>
             <p className="font-serif text-[22px] text-white mb-3">manifest<span className="text-[#b8922a]">.</span></p>
-            <p className="text-[13px] text-white/35 leading-[1.7] max-w-[220px] mb-5">Built on the science of action — not passive visualization. Your goals deserve more than a pretty board.</p>
+            <p className="text-[13px] text-white/35 leading-[1.7] max-w-[220px]">Built on the science of action — not passive visualization. Your goals deserve more than a pretty board.</p>
           </div>
-          {[{title:'Product',links:['How it works','AI Coach','Vision Art','Goal Circles','Friends & DMs','Print Shop']},{title:'Company',links:['About','Blog','Careers','Press','Contact']},{title:'Legal',links:['Privacy Policy','Terms of Service','Cookie Policy','Support']}].map(col=>(
+          {[
+            {title:'Product',links:['How it works','AI Coach','Vision Art','Goal Circles','Friends & DMs','Print Shop']},
+            {title:'Company',links:['About','Blog','Careers','Press','Contact']},
+            {title:'Legal',links:['Privacy Policy','Terms of Service','Cookie Policy','Support']},
+          ].map(col=>(
             <div key={col.title}>
               <p className="text-[10px] font-medium tracking-[.14em] uppercase text-white/30 mb-4">{col.title}</p>
               {col.links.map(l=><p key={l} className="text-[13px] text-white/35 mb-2 cursor-pointer hover:text-white/70 transition-colors">{l}</p>)}
@@ -237,6 +246,7 @@ export default async function HomePage() {
           <span>Built on action science · Powered by AI</span>
         </div>
       </footer>
+
     </div>
   )
 }
