@@ -1,43 +1,34 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 
+const HERO_CARDS = [
+  { src:'photo-1571019613454-1cb2f99b2d8b', name:'James T.', goal:'Completed first marathon', badge:'3:52 finish', rot:-3, delay:'0s', pos:{top:10,left:10}, w:250, h:320 },
+  { src:'photo-1573496359142-b8d87734a5a2', name:'Ariana M.', goal:'Launched her brand', badge:'$10k first month', rot:2.5, delay:'0.4s', pos:{top:30,right:0}, w:230, h:290 },
+  { src:'photo-1500648767791-00dcc994a43e', name:'Marcus L.', goal:'Saved first $50k', badge:'4 months early', rot:1, delay:'0.8s', pos:{bottom:10,left:60}, w:210, h:260 },
+]
+
 async function getPublicData() {
-  const supabase = createClient()
-  const { data: stories } = await supabase
-    .from('success_stories')
-    .select('*, profiles(full_name)')
-    .eq('is_public', true)
-    .order('created_at', { ascending: false })
-    .limit(3)
-
-  const { count: userCount } = await supabase
-    .from('profiles')
-    .select('*', { count: 'exact', head: true })
-
-  const { count: goalCount } = await supabase
-    .from('goals')
-    .select('*', { count: 'exact', head: true })
-
-  return { stories: stories || [], userCount: userCount || 0, goalCount: goalCount || 0 }
+  try {
+    const supabase = createClient()
+    const [storiesRes, userCountRes, goalCountRes] = await Promise.all([
+      supabase.from('success_stories').select('*, profiles(full_name,avatar_url)').eq('is_public',true).order('created_at',{ascending:false}).limit(3),
+      supabase.from('profiles').select('*',{count:'exact',head:true}),
+      supabase.from('goals').select('*',{count:'exact',head:true}),
+    ])
+    return { stories:storiesRes.data||[], userCount:userCountRes.count||0, goalCount:goalCountRes.count||0 }
+  } catch { return { stories:[], userCount:0, goalCount:0 } }
 }
 
 const FALLBACK_STORIES = [
-  { quote: "The vision art is on my wall. Every morning I see who I'm becoming. Crossed the finish line in 3:52.", profiles: { full_name: 'James T.' }, goal_title: 'Completed first marathon' },
-  { quote: "The coach called me out when I was making excuses. I launched 3 weeks ahead of schedule.", profiles: { full_name: 'Ariana M.' }, goal_title: 'Launched skincare brand' },
-  { quote: "Weekly reports showed me I was self-sabotaging. Hit $50k four months early.", profiles: { full_name: 'Marcus L.' }, goal_title: 'Saved first $50,000' },
-]
-
-const HERO_PHOTOS = [
-  { src:'photo-1571019613454-1cb2f99b2d8b', name:'James T.', goal:'Completed first marathon', badge:'3:52 finish', rot:-3, delay:'0s' },
-  { src:'photo-1573496359142-b8d87734a5a2', name:'Ariana M.', goal:'Launched her brand', badge:'$10k first month', rot:2.5, delay:'0.4s' },
-  { src:'photo-1500648767791-00dcc994a43e', name:'Marcus L.', goal:'Saved first $50k', badge:'4 months early', rot:1, delay:'0.8s' },
+  { quote:"The vision art is on my wall. Every morning I see who I'm becoming. Crossed the line in 3:52.", profiles:{full_name:'James T.',avatar_url:null}, goal_title:'Completed first marathon' },
+  { quote:"The coach called me out when I was making excuses. I launched 3 weeks ahead of schedule.", profiles:{full_name:'Ariana M.',avatar_url:null}, goal_title:'Launched skincare brand' },
+  { quote:"Weekly reports showed me I was self-sabotaging. Hit $50k four months early.", profiles:{full_name:'Marcus L.',avatar_url:null}, goal_title:'Saved first $50,000' },
 ]
 
 export default async function HomePage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { stories, userCount, goalCount } = await getPublicData()
-
   const displayStories = stories.length >= 2 ? stories : FALLBACK_STORIES
   const statUsers = Math.max(userCount, 12400)
   const statGoals = Math.max(goalCount, 12000)
@@ -54,14 +45,10 @@ export default async function HomePage() {
         </div>
         <div className="flex gap-2 items-center">
           {user ? (
-            <>
-              <Link href="/dashboard" className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium border border-[#e8e8e8] rounded-lg hover:bg-[#f8f7f5] transition-colors">
-                <div className="w-5 h-5 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[10px] font-bold">
-                  {user.email?.[0]?.toUpperCase()}
-                </div>
-                Dashboard
-              </Link>
-            </>
+            <Link href="/dashboard" className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-[#111] text-white rounded-lg hover:bg-[#2a2a2a] transition-colors">
+              <div className="w-5 h-5 rounded-full bg-[#b8922a] flex items-center justify-center text-[10px] font-bold">{user.email?.[0]?.toUpperCase()}</div>
+              My dashboard →
+            </Link>
           ) : (
             <>
               <Link href="/auth/login" className="px-4 py-2 text-[13px] font-medium border border-[#d0d0d0] rounded-lg hover:bg-[#f8f7f5] transition-colors">Sign in</Link>
@@ -83,17 +70,11 @@ export default async function HomePage() {
           </p>
           <div className="flex gap-3 mb-10 fade-up-3">
             {user ? (
-              <Link href="/dashboard" className="px-7 py-3.5 bg-[#b8922a] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#9a7820] transition-all hover:-translate-y-px">
-                Continue my journey →
-              </Link>
+              <Link href="/dashboard" className="px-7 py-3.5 bg-[#b8922a] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#9a7820] transition-all hover:-translate-y-px">Continue my journey →</Link>
             ) : (
               <>
-                <Link href="/auth/signup" className="px-7 py-3.5 bg-[#111] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#2a2a2a] transition-all hover:-translate-y-px">
-                  Create your vision — free
-                </Link>
-                <a href="#how" className="px-7 py-3.5 border border-[#d0d0d0] rounded-[14px] font-medium text-[15px] hover:bg-[#f8f7f5] transition-colors">
-                  See how it works
-                </a>
+                <Link href="/auth/signup" className="px-7 py-3.5 bg-[#111] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#2a2a2a] transition-all hover:-translate-y-px">Create your vision — free</Link>
+                <a href="#how" className="px-7 py-3.5 border border-[#d0d0d0] rounded-[14px] font-medium text-[15px] hover:bg-[#f8f7f5] transition-colors">See how it works</a>
               </>
             )}
           </div>
@@ -105,22 +86,32 @@ export default async function HomePage() {
                 </div>
               ))}
             </div>
-            <p className="text-[13px] text-[#666]">
-              <strong className="text-[#111] font-medium">{statUsers.toLocaleString()}+</strong> people building their dream life
-            </p>
+            <p className="text-[13px] text-[#666]"><strong className="text-[#111] font-medium">{statUsers.toLocaleString()}+</strong> people building their dream life</p>
           </div>
         </div>
-        <div className="hidden md:flex items-center justify-center p-12 overflow-hidden">
-          <div className="relative w-[380px] h-[480px]">
-            {HERO_PHOTOS.map((p,i)=>(
-              <div key={i} className="absolute rounded-2xl overflow-hidden shadow-2xl float-anim" style={{
-                width: 250-i*20, height: 320-i*30,
-                top: i===0?10:i===1?30:undefined, bottom: i===2?10:undefined,
-                left: i===0?10:i===2?60:undefined, right: i===1?0:undefined,
-                '--r':`${p.rot}deg`, transform:`rotate(${p.rot}deg)`, animationDelay: p.delay
-              } as any}>
-                <img src={`https://images.unsplash.com/${p.src}?w=400&h=500&fit=crop&crop=top`} alt="" className="w-full h-full object-cover"/>
-                <div className="absolute bottom-3 left-3 right-3 bg-white/92 backdrop-blur-sm rounded-xl p-2.5">
+
+        {/* Draggable hero cards */}
+        <div className="hidden md:flex items-center justify-center p-12 overflow-hidden" id="hero-cards">
+          <div className="relative w-[380px] h-[480px]" id="card-stack">
+            {HERO_CARDS.map((p,i)=>(
+              <div key={i} id={`hcard-${i}`}
+                className="absolute rounded-2xl overflow-hidden shadow-2xl float-anim cursor-grab active:cursor-grabbing select-none"
+                style={{
+                  width:p.w, height:p.h, ...p.pos,
+                  '--r':`${p.rot}deg`, transform:`rotate(${p.rot}deg)`,
+                  animationDelay:p.delay, zIndex:3-i, touchAction:'none'
+                } as any}
+                onMouseDown={(e)=>{
+                  const el = e.currentTarget
+                  const rect = el.getBoundingClientRect()
+                  const dx = e.clientX-rect.left, dy = e.clientY-rect.top
+                  el.style.zIndex='10'; el.style.transform='rotate(0deg)'; el.style.animation='none'
+                  const move = (ev:MouseEvent) => { el.style.left=(ev.clientX-dx-el.parentElement!.getBoundingClientRect().left)+'px'; el.style.top=(ev.clientY-dy-el.parentElement!.getBoundingClientRect().top)+'px'; el.style.right='auto'; el.style.bottom='auto' }
+                  const up = () => { el.style.zIndex=String(3-i); el.style.transform=`rotate(${p.rot}deg)`; el.style.animation=''; document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up) }
+                  document.addEventListener('mousemove',move); document.addEventListener('mouseup',up)
+                }}>
+                <img src={`https://images.unsplash.com/${p.src}?w=400&h=500&fit=crop&crop=top`} alt="" className="w-full h-full object-cover pointer-events-none"/>
+                <div className="absolute bottom-3 left-3 right-3 bg-white/92 backdrop-blur-sm rounded-xl p-2.5 pointer-events-none">
                   <p className="text-[13px] font-medium">{p.name}</p>
                   <p className="text-[11px] text-[#666]">{p.goal}</p>
                   <span className="inline-block mt-1 text-[10px] font-medium text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full">{p.badge}</span>
@@ -134,7 +125,7 @@ export default async function HomePage() {
       {/* TICKER */}
       <div className="bg-[#111] overflow-hidden py-2.5">
         <div className="ticker-track">
-          {['Vision art','Daily coaching','Real accountability','Goal circles','Friends & DMs','AI-powered','Streak tracking','Vision art','Daily coaching','Real accountability','Goal circles','Friends & DMs','AI-powered','Streak tracking'].map((t,i)=>(
+          {['Vision art','Daily coaching','Real accountability','Goal circles','Friends & DMs','AI-powered','Phase tracking','Rewards system','Vision art','Daily coaching','Real accountability','Goal circles','Friends & DMs','AI-powered','Phase tracking','Rewards system'].map((t,i)=>(
             <span key={i}><span className="text-[11px] tracking-[.16em] text-white/40 px-5 uppercase font-mono">{t}</span><span className="text-[#b8922a] px-1">·</span></span>
           ))}
         </div>
@@ -145,15 +136,15 @@ export default async function HomePage() {
         <div className="max-w-[1240px] mx-auto">
           <div className="max-w-[520px] mb-14">
             <p className="text-[11px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-3">How it works</p>
-            <h2 className="font-serif text-[clamp(32px,3.5vw,52px)] leading-[1.08] tracking-[-0.02em] mb-3">A system built around how humans actually change</h2>
-            <p className="text-[16px] text-[#666] leading-[1.75]">Most goal apps track tasks. Manifest tracks transformation.</p>
+            <h2 className="font-serif text-[clamp(32px,3.5vw,52px)] leading-[1.08] tracking-[-0.02em] mb-3">A system built for action,<br/>not passive wishing</h2>
+            <p className="text-[16px] text-[#666] leading-[1.75]">Research shows that visualizing yourself <em>doing the work</em> outperforms visualizing success. Manifest is built around that truth.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-[#e8e8e8] border border-[#e8e8e8] rounded-2xl overflow-hidden">
             {[
-              { n:'01', title:'Tell us your goal', desc:'A guided intake that goes beyond "what" — your why, fears, timeline, motivators, and what success truly looks like. The more specific, the better your manifest.' },
-              { n:'02', title:'Get your vision art', desc:'AI generates personalized visual concepts — beautiful enough to frame, specific enough to feel like yours. Regenerate once a day to explore new styles.' },
-              { n:'03', title:'Meet your AI coach', desc:'Your coach knows everything — your goal, your why, your patterns. Checks in daily, adapts based on real progress, and coaches the way you prefer.' },
-              { n:'04', title:'Build real momentum', desc:'Streaks, milestones, goal circles, friends, and a community celebrating wins. Adjust your timeline anytime. Complete your goal and inspire others.' },
+              {n:'01',title:'Tell us your goal & who you are',desc:'A guided intake — your why, timeline, motivators, coaching style, and appearance for personalized vision art. Not generic. Built for you.'},
+              {n:'02',title:'Get vision art that shows YOU winning',desc:'AI generates art showing a person who looks like you actively achieving your goal. Beautiful enough to frame, specific enough to move you daily.'},
+              {n:'03',title:'Work with a coach that knows everything',desc:'Your coach knows your goal, your timeline, your why, your patterns. It tracks when you change timelines and adapts instantly.'},
+              {n:'04',title:'Build momentum that compounds',desc:'Daily streaks, phase milestones, rewards, goal circles with ranking — every day you show up builds toward the person you\'re becoming.'},
             ].map(h=>(
               <div key={h.n} className="bg-white p-10 hover:bg-[#f8f7f5] transition-colors">
                 <div className="font-serif text-5xl text-[#faf3e0] leading-none mb-4">{h.n}</div>
@@ -176,11 +167,7 @@ export default async function HomePage() {
               <h2 className="font-serif text-[clamp(32px,3.5vw,52px)] leading-[1.08] tracking-[-0.02em]">Goals that became real</h2>
             </div>
             <div className="flex gap-8">
-              {[
-                [`${statUsers.toLocaleString()}+`,'Users'],
-                [`${statGoals.toLocaleString()}+`,'Goals created'],
-                ['4.9★','Avg rating']
-              ].map(([v,l])=>(
+              {[[`${statUsers.toLocaleString()}+`,'Users'],[`${statGoals.toLocaleString()}+`,'Goals created'],['4.9★','Avg rating']].map(([v,l])=>(
                 <div key={l} className="border-l-2 border-[#b8922a] pl-4">
                   <div className="font-serif text-[32px]">{v}</div>
                   <div className="text-[11px] font-medium text-[#666] uppercase tracking-[.08em]">{l}</div>
@@ -189,19 +176,23 @@ export default async function HomePage() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {displayStories.slice(0,3).map((s: any, i: number) => (
+            {displayStories.slice(0,3).map((s:any,i:number)=>(
               <div key={i} className="border border-[#e8e8e8] rounded-2xl overflow-hidden hover-lift">
                 <div className="h-[190px] overflow-hidden">
-                  <img src={`https://images.unsplash.com/${HERO_PHOTOS[i % 3]?.src}?w=600&h=380&fit=crop&crop=top`} alt="" className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"/>
+                  <img src={`https://images.unsplash.com/${HERO_CARDS[i%3]?.src}?w=600&h=380&fit=crop&crop=top`} alt="" className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"/>
                 </div>
                 <div className="p-5">
                   <p className="font-serif italic text-[15px] leading-[1.65] mb-4">"{s.quote}"</p>
                   <div className="flex items-center gap-3 border-t border-[#e8e8e8] pt-4">
-                    <div className="w-9 h-9 rounded-full bg-[#b8922a] flex items-center justify-center text-white font-semibold text-[13px] flex-shrink-0">
-                      {s.profiles?.full_name?.[0]?.toUpperCase() || '?'}
-                    </div>
+                    {s.profiles?.avatar_url ? (
+                      <img src={s.profiles.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0"/>
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-[#b8922a] flex items-center justify-center text-white font-semibold text-[13px] flex-shrink-0">
+                        {s.profiles?.full_name?.[0]?.toUpperCase()||'?'}
+                      </div>
+                    )}
                     <div>
-                      <p className="text-[13px] font-medium">{s.profiles?.full_name || 'Community member'}</p>
+                      <p className="text-[13px] font-medium">{s.profiles?.full_name||'Community member'}</p>
                       <p className="text-[11px] text-[#b8922a] font-medium">{s.goal_title}</p>
                     </div>
                   </div>
@@ -215,29 +206,28 @@ export default async function HomePage() {
       {/* PRICING */}
       <section id="pricing" className="py-24 px-12 bg-[#f8f7f5]">
         <div className="max-w-[1240px] mx-auto">
-          <div className="text-center max-w-[440px] mx-auto mb-14">
+          <div className="text-center max-w-[480px] mx-auto mb-14">
             <p className="text-[11px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-3">Pricing</p>
-            <h2 className="font-serif text-[clamp(32px,3.5vw,52px)] leading-[1.08] tracking-[-0.02em]">Start free, upgrade when you're ready</h2>
+            <h2 className="font-serif text-[clamp(32px,3.5vw,52px)] leading-[1.08] tracking-[-0.02em]">Start free, upgrade when ready</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-[900px] mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-[700px] mx-auto">
             {[
-              { name:'Free', price:'$0', period:'forever', desc:'Everything you need to start.', feats:['1 goal + vision art','3 AI art concepts','30-day AI coaching','Daily reminders','Friends & DMs'], featured:false, cta:'Get started free' },
-              { name:'Pro', price:'$9', period:'/month', desc:'For serious goal setters.', feats:['Unlimited goals','AI concepts per goal','Full AI coach','Streaks + analytics','Goal Circles','Friends & DMs','Vision board regeneration','Weekly reports'], featured:true, cta:'Start free trial' },
-              { name:'Elite', price:'$29', period:'/month', desc:'For those who refuse to leave goals to chance.', feats:['Everything in Pro','Human coach session/mo','Free monthly print','Premium art styles','Priority support'], featured:false, cta:'Get Elite' },
+              {name:'Free',price:'$0',period:'forever',desc:'Start your first goal today.',feats:['2 active goals','5 AI coach chats/day','Basic vision art','Streaks + calendar','Join goal circles','Friends & DMs'],cta:'Get started free',featured:false},
+              {name:'Pro',price:'Free',period:'for 3 months',desc:'Then $9/month. Everything unlocked.',feats:['5 active goals','15 AI coach chats/day','Personalized vision art (YOU in it)','Regenerate art daily','Create your own circles','Ranking in circles','Phase rewards','Priority support'],cta:'Start 3-month trial',featured:true},
             ].map(p=>(
               <div key={p.name} className={`rounded-2xl p-8 relative ${p.featured?'border-2 border-[#111] bg-white':'border border-[#e8e8e8] bg-white'}`}>
-                {p.featured && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#111] text-white text-[11px] font-medium px-4 py-1 rounded-full whitespace-nowrap">Most popular</div>}
+                {p.featured && <div className="absolute -top-3 left-6 bg-[#b8922a] text-white text-[10px] font-medium px-3 py-1 rounded-full">FREE FOR 3 MONTHS</div>}
                 <p className="text-[11px] font-medium tracking-[.12em] uppercase text-[#666] mb-1.5">{p.name}</p>
                 <div className="flex items-baseline gap-1 mb-1">
-                  <span className="font-serif text-[52px] leading-none">{p.price}</span>
+                  <span className="font-serif text-[48px] leading-none">{p.price}</span>
                   <span className="text-[13px] text-[#666]">{p.period}</span>
                 </div>
                 <p className="text-[13px] text-[#666] mb-4 leading-[1.6]">{p.desc}</p>
                 <div className="h-px bg-[#e8e8e8] mb-4"/>
-                <ul className="space-y-2 mb-6">
-                  {p.feats.map(f=><li key={f} className="flex gap-2 text-[13px]"><span className="text-[#b8922a] flex-shrink-0">✓</span>{f}</li>)}
+                <ul className="space-y-2.5 mb-6">
+                  {p.feats.map(f=><li key={f} className="flex gap-2 text-[13px]"><span className="text-[#b8922a] flex-shrink-0 font-bold">✓</span>{f}</li>)}
                 </ul>
-                <Link href={user ? '/dashboard' : '/auth/signup'} className={`block w-full py-3 text-center text-[13px] font-medium rounded-xl transition-all ${p.featured?'bg-[#111] text-white hover:bg-[#2a2a2a]':'border border-[#d0d0d0] hover:bg-[#f8f7f5]'}`}>{p.cta}</Link>
+                <Link href={user?'/dashboard':'/auth/signup'} className={`block w-full py-3 text-center text-[13px] font-medium rounded-xl transition-all ${p.featured?'bg-[#111] text-white hover:bg-[#2a2a2a]':'border border-[#d0d0d0] hover:bg-[#f8f7f5]'}`}>{p.cta}</Link>
               </div>
             ))}
           </div>
@@ -247,12 +237,10 @@ export default async function HomePage() {
 
       {/* CTA */}
       <section className="py-24 px-12 bg-[#111] text-center">
-        <h2 className="font-serif text-[clamp(36px,4.5vw,64px)] leading-[1.07] tracking-[-0.02em] text-white mb-4">
-          Your future self is<br/><em className="italic text-[#b8922a]">already waiting.</em>
-        </h2>
+        <h2 className="font-serif text-[clamp(36px,4.5vw,64px)] leading-[1.07] tracking-[-0.02em] text-white mb-4">Your future self is<br/><em className="italic text-[#b8922a]">already waiting.</em></h2>
         <p className="text-[16px] text-white/40 mb-8">Start free. No credit card. 5 minutes.</p>
-        <Link href={user ? '/dashboard' : '/auth/signup'} className="inline-block px-8 py-4 bg-[#b8922a] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#9a7820] transition-all hover:-translate-y-px">
-          {user ? 'Continue my journey →' : 'Create my vision now →'}
+        <Link href={user?'/dashboard':'/auth/signup'} className="inline-block px-8 py-4 bg-[#b8922a] text-white rounded-[14px] font-medium text-[15px] hover:bg-[#9a7820] transition-all hover:-translate-y-px">
+          {user?'Continue my journey →':'Create my vision now →'}
         </Link>
       </section>
 
@@ -261,13 +249,9 @@ export default async function HomePage() {
         <div className="max-w-[1240px] mx-auto grid grid-cols-2 md:grid-cols-4 gap-12 mb-12">
           <div>
             <p className="font-serif text-[22px] text-white mb-3">manifest<span className="text-[#b8922a]">.</span></p>
-            <p className="text-[13px] text-white/35 leading-[1.7] max-w-[220px] mb-5">The world's most purposeful goal system. Not a vision board — a transformation engine.</p>
+            <p className="text-[13px] text-white/35 leading-[1.7] max-w-[220px] mb-5">Built on the science of action — not passive visualization. Your goals deserve more than a pretty board.</p>
           </div>
-          {[
-            { title:'Product', links:['How it works','AI Coach','Vision Art','Goal Circles','Friends & DMs','Print Shop'] },
-            { title:'Company', links:['About','Blog','Careers','Press','Contact'] },
-            { title:'Legal', links:['Privacy Policy','Terms of Service','Cookie Policy','Support'] },
-          ].map(col=>(
+          {[{title:'Product',links:['How it works','AI Coach','Vision Art','Goal Circles','Friends & DMs','Print Shop']},{title:'Company',links:['About','Blog','Careers','Press','Contact']},{title:'Legal',links:['Privacy Policy','Terms of Service','Cookie Policy','Support']}].map(col=>(
             <div key={col.title}>
               <p className="text-[10px] font-medium tracking-[.14em] uppercase text-white/30 mb-4">{col.title}</p>
               {col.links.map(l=><p key={l} className="text-[13px] text-white/35 mb-2 cursor-pointer hover:text-white/70 transition-colors">{l}</p>)}
@@ -276,7 +260,7 @@ export default async function HomePage() {
         </div>
         <div className="border-t border-white/[0.07] pt-6 max-w-[1240px] mx-auto flex justify-between text-[12px] text-white/20">
           <span>© 2026 Manifest. All rights reserved.</span>
-          <span>Built with purpose · Powered by AI</span>
+          <span>Built on action science · Powered by AI</span>
         </div>
       </footer>
     </div>
