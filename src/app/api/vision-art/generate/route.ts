@@ -22,70 +22,117 @@ export async function POST(request: Request) {
     const falKey = process.env.FAL_KEY
     if (!falKey) return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
 
+    // Gender descriptor for scene
+    const gender = goal.user_gender
+    const isMale = gender === 'Man'
+    const isFemale = gender === 'Woman'
+    const genderWord = isMale ? 'man' : isFemale ? 'woman' : 'person'
+    const genderPronoun = isMale ? 'his' : isFemale ? 'her' : 'their'
+
+    // Aesthetic to photography style
     const aestheticStyle: Record<string, string> = {
       'Minimal & clean':    'Kinfolk magazine editorial photography, soft diffused light, clean neutral tones, elegant and minimal',
-      'Bold & dark':        'dramatic cinematic photography, rich shadows, moody and powerful, like a Christopher Nolan film still',
+      'Bold & dark':        'dramatic cinematic photography, rich deep shadows, moody and powerful, Christopher Nolan film still quality',
       'Warm & natural':     'golden hour photography, warm amber tones, analog film grain, emotionally resonant, National Geographic quality',
-      'Bright & energetic': 'vibrant Nike campaign photography, punchy colors, dynamic motion blur, electric energy, aspirational',
+      'Bright & energetic': 'vibrant Nike campaign photography, punchy colors, dynamic energy, electric and aspirational',
     }
     const style = aestheticStyle[goal.aesthetic] || aestheticStyle['Bright & energetic']
 
     const category = (goal.category || '').toLowerCase()
     const title = (goal.title || '').toLowerCase()
+    const why = (goal.why || '').toLowerCase()
 
-    // Scenes: people allowed but NEVER showing faces — silhouettes, backs, side profiles, hands, feet
-    // No text, no numbers, no words in the image
+    // Smart keyword matching — title takes priority over category
     let scene = ''
 
-    if (category.includes('health') || category.includes('fitness') || title.includes('marathon') || title.includes('run') || title.includes('gym') || title.includes('weight')) {
-      scene = 'a lone runner silhouetted against a blazing sunrise at the finish line of a marathon, arms outstretched in victory, motion blur on the legs, golden mist rising from the track, shot from behind at ground level, cinematic and emotional'
-    } else if (category.includes('financial') || title.includes('money') || title.includes('wealth') || title.includes('invest') || title.includes('save') || title.includes('financial')) {
-      scene = 'hands holding a small plant growing from a pile of soil on a clean white surface, morning light streaming through a window casting long shadows, shallow depth of field, symbolizing growth and abundance'
-    } else if (category.includes('career') || category.includes('business') || title.includes('startup') || title.includes('launch') || title.includes('business') || title.includes('app')) {
-      scene = 'a person in a sharp suit standing at floor-to-ceiling windows of a high-rise office, back to camera, overlooking a glowing city at golden hour, arms relaxed at sides, silhouette bathed in warm amber light'
-    } else if (title.includes('write') || title.includes('novel') || title.includes('book') || title.includes('author')) {
-      scene = 'hands typing on a vintage typewriter on a wooden desk beside a rain-streaked window, morning light, a steaming coffee cup, stacked books in soft focus background, cozy and creative atmosphere'
-    } else if (category.includes('creative') || title.includes('music') || title.includes('sing') || title.includes('paint') || title.includes('art')) {
-      scene = 'a musician silhouetted on a stage, back to the audience, spotlight cutting through dramatic smoke, crowd of blurred lights stretching into the distance, concert photography, powerful and dreamlike'
-    } else if (category.includes('travel') || title.includes('travel') || title.includes('italy') || title.includes('europe') || title.includes('trip') || title.includes('visit')) {
-      scene = 'a solo traveler standing at the edge of a sun-drenched cliff overlooking a turquoise Mediterranean sea, back to camera, light summer clothes billowing gently in the breeze, total freedom and wanderlust'
-    } else if (category.includes('relationship') || title.includes('love') || title.includes('family') || title.includes('friend')) {
-      scene = 'two silhouettes sitting together on a hilltop watching a breathtaking sunset, warm golden light, wildflowers in foreground, shot from behind, radiating peace love and connection'
-    } else if (category.includes('learning') || category.includes('education') || title.includes('degree') || title.includes('learn') || title.includes('study')) {
-      scene = 'a student silhouette in a beautiful library, back to camera, reaching for a book on a tall shelf, warm amber library light, rows of books stretching endlessly, dust particles in the light beams'
-    } else if (category.includes('personal') || category.includes('growth') || title.includes('confidence') || title.includes('mindset') || title.includes('meditation')) {
-      scene = 'a lone person sitting in meditation on a mountain summit at sunrise, back to camera, arms resting on knees, vast misty valley below, rays of sun breaking through clouds, transcendent and peaceful'
+    // CODING / PROGRAMMING / TECH
+    if (title.includes('cod') || title.includes('program') || title.includes('develop') || title.includes('software') || title.includes('tech') || title.includes('engineer') || title.includes('app') || title.includes('web') || (category.includes('career') && why.includes('cod'))) {
+      scene = `a ${genderWord} silhouette seen from behind, sitting at a sleek minimal desk with multiple monitors glowing with lines of code, dark room lit only by the blue-green screen light, city lights twinkling through floor-to-ceiling windows at night, ${genderPronoun} reflection faintly visible in the glass, intense focus and quiet determination`
+
+    // MARATHON / RUNNING / FITNESS
+    } else if (title.includes('marathon') || title.includes('run') || title.includes('race') || title.includes('triathlon')) {
+      scene = `a ${genderWord} silhouette from behind crossing a marathon finish line at golden sunrise, arms raised in triumph, motion blur on ${genderPronoun} legs, golden mist rising from the track, stadium lights fading into dawn light, deeply emotional`
+
+    // GYM / WEIGHT LOSS / FITNESS
+    } else if (title.includes('gym') || title.includes('weight') || title.includes('fit') || title.includes('muscle') || title.includes('body') || category.includes('health')) {
+      scene = `a ${genderWord} silhouette in a modern gym at sunrise, back to camera, standing before a large mirror, dramatic light cutting through floor-to-ceiling windows, equipment in soft focus, powerful and determined atmosphere`
+
+    // FINANCIAL / WEALTH / MONEY
+    } else if (title.includes('financ') || title.includes('money') || title.includes('wealth') || title.includes('invest') || title.includes('save') || title.includes('rich') || category.includes('financial')) {
+      scene = `hands of a ${genderWord} holding a small thriving plant growing from rich soil placed on a clean marble surface, morning light streaming through a window, a blurred city skyline in background, symbolizing financial growth and abundance`
+
+    // STARTUP / BUSINESS / LAUNCH
+    } else if (title.includes('startup') || title.includes('launch') || title.includes('business') || title.includes('company') || title.includes('found') || title.includes('brand') || category.includes('business')) {
+      scene = `a ${genderWord} silhouette standing confidently at floor-to-ceiling windows of a high-rise, back to camera, overlooking a glowing city skyline at golden hour, ${genderPronoun} reflection visible in the glass, a whiteboard with ideas faintly visible behind`
+
+    // WRITING / BOOK / NOVEL
+    } else if (title.includes('write') || title.includes('novel') || title.includes('book') || title.includes('author') || title.includes('publish')) {
+      scene = `${genderWord}'s hands typing on a vintage typewriter on a wooden desk beside a rain-streaked window, morning light, a steaming coffee cup, stacked books in soft focus, creative and cozy atmosphere, cinematic warmth`
+
+    // MUSIC
+    } else if (title.includes('music') || title.includes('sing') || title.includes('guitar') || title.includes('piano') || title.includes('album') || title.includes('band')) {
+      scene = `a ${genderWord} musician silhouette on a stage, back to the crowd, spotlight cutting through dramatic smoke, thousands of blurred lights stretching into the darkness, arms outstretched, pure euphoria`
+
+    // TRAVEL
+    } else if (title.includes('travel') || title.includes('italy') || title.includes('europe') || title.includes('trip') || title.includes('visit') || title.includes('world') || category.includes('travel')) {
+      scene = `a ${genderWord} silhouette standing at the edge of a sun-drenched cliff, back to camera, overlooking a breathtaking turquoise Mediterranean coastline, light clothes billowing in the breeze, pure freedom`
+
+    // CREATIVE ART / DESIGN
+    } else if (title.includes('design') || title.includes('creat') || title.includes('art') || title.includes('paint') || category.includes('creative')) {
+      scene = `a ${genderWord} silhouette from behind, standing in front of a massive canvas in a sunlit studio, paint-streaked walls, warm afternoon light streaming through tall windows, creating something extraordinary`
+
+    // LEARNING / EDUCATION / DEGREE
+    } else if (title.includes('learn') || title.includes('study') || title.includes('degree') || title.includes('graduate') || title.includes('course') || category.includes('learning')) {
+      scene = `a ${genderWord} silhouette in a grand university lecture hall, back to camera, walking toward a bright light at the end of a long corridor lined with doors of opportunity, symbolic and aspirational`
+
+    // PERSONAL GROWTH / MINDSET / MEDITATION
+    } else if (title.includes('meditat') || title.includes('mindset') || title.includes('confidence') || title.includes('mental') || category.includes('personal')) {
+      scene = `a ${genderWord} silhouette sitting in meditation on a mountain summit at sunrise, back to camera, legs crossed, arms resting on knees, vast misty valley stretching below, golden rays breaking through dramatic clouds`
+
+    // RELATIONSHIP
+    } else if (category.includes('relationship') || title.includes('love') || title.includes('family') || title.includes('partner') || title.includes('friend')) {
+      scene = `two silhouettes on a hilltop at sunset, sitting side by side, back to camera, wildflowers in foreground, vast golden landscape, warmth and deep human connection radiating from the scene`
+
+    // DEFAULT — use art description or make something symbolic
     } else {
-      // Use the AI art description but strip any face/text references
       const artDesc = goal.art_description || ''
       scene = artDesc.length > 30
-        ? `${artDesc} — shot from behind or as a silhouette, no faces visible, dreamlike and cinematic`
-        : `a person silhouetted against a breathtaking landscape that symbolizes achieving ${goal.title}, back to camera, golden hour light, vast and inspiring`
+        ? `${artDesc}, ${genderWord} silhouette, back to camera, no faces, dreamlike and cinematic`
+        : `a ${genderWord} silhouette standing at the threshold of a vast glowing horizon, back to camera, arms slightly raised, golden light flooding the scene, representing the achievement of ${goal.title}`
     }
 
     const prompt = [
       `Breathtaking ${style}.`,
       `${scene}.`,
-      `Hyper-realistic photography, shot on Hasselblad H6D, 50mm lens, f/1.4 aperture, shallow depth of field.`,
-      `Cinematic color grading, film quality.`,
-      `No faces visible — subject seen from behind, silhouetted, or in profile only.`,
-      `No text, no letters, no numbers, no words anywhere in the image.`,
-      `Deeply emotional, motivational, and dreamlike.`,
-      `The kind of image that makes you feel you can achieve anything.`,
-      `Award-winning photography, 8K resolution.`,
+      `Shot on Hasselblad H6D medium format camera, 85mm lens, f/1.4 aperture, beautiful bokeh.`,
+      `Cinematic color grading, film quality, deeply emotional.`,
+      `Subject seen from behind or as a silhouette — absolutely no faces visible.`,
+      `No text, no letters, no numbers, no words, no signs anywhere in the image.`,
+      `Motivational, dreamlike, and deeply aspirational.`,
+      `The kind of image that makes you believe anything is possible.`,
+      `Ultra high resolution, award-winning photography.`,
     ].join(' ')
 
     const negativePrompt = [
-      'face, faces, portrait, looking at camera, frontal view',
-      'text, letters, words, numbers, signs, labels, captions, watermark, logo',
-      'ugly, deformed, distorted, bad anatomy',
+      'face, faces, portrait, frontal view, looking at camera, eyes, nose, mouth',
+      'female, woman, girl, lady',  // only add opposite gender to negative
+      'text, letters, words, numbers, signs, labels, captions, watermark, logo, brand',
+      'ugly, deformed, distorted, bad anatomy, extra limbs',
       'cartoon, anime, illustration, painting, CGI, 3D render, sketch',
-      'low quality, blurry, grainy, pixelated, noisy',
-      'dark, gloomy, depressing, scary, horror',
+      'low quality, blurry, grainy, pixelated',
+      'dark, gloomy, depressing, scary',
       'stock photo, generic, cheesy',
-    ].join(', ')
+    ]
 
-    console.log('Generating vision art for:', goal.title)
+    // Remove opposite gender from negative prompt based on user
+    const finalNegative = isMale
+      ? negativePrompt.filter(p => !p.includes('female')) // keep female in negative for male user
+      : isFemale
+        ? [...negativePrompt.filter(p => !p.includes('female')), 'man, male, boy, masculine']
+        : negativePrompt.filter(p => !p.includes('female'))
+
+    console.log('Generating art for:', goal.title, '| Gender:', genderWord)
+    console.log('Scene:', scene.slice(0, 120))
 
     const falResponse = await fetch('https://fal.run/fal-ai/flux/dev', {
       method: 'POST',
@@ -95,7 +142,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         prompt,
-        negative_prompt: negativePrompt,
+        negative_prompt: finalNegative.join(', '),
         image_size: 'portrait_4_3',
         num_inference_steps: 35,
         guidance_scale: 4.0,
@@ -111,7 +158,6 @@ export async function POST(request: Request) {
     if (falResponse.ok) {
       const falData = await falResponse.json()
       imageUrl = falData.images?.[0]?.url || null
-      console.log('flux/dev succeeded')
     } else {
       const errText = await falResponse.text()
       console.error('flux/dev failed:', falResponse.status, errText.slice(0, 300))
@@ -135,7 +181,6 @@ export async function POST(request: Request) {
       }
       const fbData = await fallback.json()
       imageUrl = fbData.images?.[0]?.url || null
-      console.log('flux/schnell fallback succeeded')
     }
 
     if (!imageUrl) return NextResponse.json({ error: 'No image returned' }, { status: 500 })
