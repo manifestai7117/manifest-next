@@ -12,33 +12,39 @@ export async function POST(request: Request) {
     }
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-5',
       max_tokens: 1024,
       system: `You are Manifest's AI goal engine. Return ONLY a raw JSON object — no markdown, no backticks, no extra text.
 Required keys:
 {
   "artTitle": "3-5 evocative words for vision art title — poetic, specific to their goal",
   "artDescription": "2 vivid sentences describing personalized vision artwork tied to their EXACT goal and chosen aesthetic style",
-  "affirmation": "1 powerful present-tense sentence starting with 'I am' or 'I' — must reference their SPECIFIC goal verbatim, not generic",
-  "milestone30": "specific measurable milestone for 30 days — tied to their exact goal",
-  "milestone60": "specific measurable milestone for 60 days",
-  "milestone90": "specific measurable milestone for 90 days — should connect to their ${timeline} timeline",
-  "coachOpening": "2-3 warm, direct, specific sentences — reference their actual goal and why. No fluff. Make them feel seen.",
-  "todayAction": "one concrete action they can take in the next 2 hours — must be specific to their goal"
+  "affirmation": "1 powerful present-tense sentence starting with I — must reference their SPECIFIC goal verbatim, written naturally as something a real person would say",
+  "milestone30": "specific measurable milestone for 30 days into their ${timeline} journey — tied to their exact goal",
+  "milestone60": "specific measurable milestone for 60 days into their ${timeline} journey",
+  "milestone90": "specific measurable milestone for 90 days into their ${timeline} journey — should reflect major progress toward the end of ${timeline}",
+  "coachOpening": "2-3 warm direct sentences — reference their actual goal and why. Make them feel seen. No fluff.",
+  "todayAction": "one concrete action they can take in the next 2 hours — must be specific to their exact goal"
 }
 
 CRITICAL RULES:
-- The timeline field says '${timeline}' — DO NOT say 'by X days'. Say 'within ${timeline}' or reference the actual date range.
-- Every output must reference their exact goal: '${goal}'
-- Never write generic platitudes
-- The affirmation must sound like something a real person would say out loud`,
+- Timeline is '${timeline}' — milestones must fit within this timeframe, never say 'by X days'
+- Every output must directly reference their exact goal: '${goal}'
+- Never write generic advice
+- The affirmation must sound natural spoken aloud`,
       messages: [{
         role: 'user',
-        content: `Name: ${userName}\nGoal: ${goal}\nCategory: ${category}\nTimeline: ${timeline}\nWhy this matters: ${why}\nPast obstacles: ${obstacles || 'None shared'}\nAesthetic preference: ${aesthetic}`
+        content: `Name: ${userName}
+Goal: ${goal}
+Category: ${category}
+Timeline: ${timeline}
+Why this matters: ${why}
+Past obstacles: ${obstacles || 'None shared'}
+Aesthetic preference: ${aesthetic}`
       }]
     })
 
-    const raw = message.content[0].type === 'text' ? message.content[0].text : ''
+    const raw = message.content[0].type === 'text' ? message.content[0].text : '{}'
     const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
 
     return NextResponse.json(parsed)
