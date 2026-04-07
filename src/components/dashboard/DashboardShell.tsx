@@ -87,3 +87,4 @@ export default function DashboardShell({ children, profile }: { children: React.
     </div>
   )
 }
+
