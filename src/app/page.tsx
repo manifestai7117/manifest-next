@@ -58,8 +58,8 @@ export default async function HomePage() {
         </div>
       </nav>
 
-      <div className="max-w-[1240px] mx-auto grid md:grid-cols-2 min-h-[calc(100vh-64px)]">
-        <div className="flex flex-col justify-center px-12 py-16 border-r border-[#e8e8e8]">
+      <div className="max-w-[1240px] mx-auto grid md:grid-cols-2 md:min-h-[calc(100vh-64px)]">
+        <div className="flex flex-col justify-center px-6 md:px-12 py-10 md:py-16 md:border-r border-[#e8e8e8]">
           <p className="text-[11px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-4">Goal achievement, reimagined</p>
           <h1 className="font-serif text-[clamp(42px,5vw,68px)] leading-[1.07] tracking-[-0.02em] mb-5">
             Turn your goals<br/>into <em className="italic text-[#b8922a]">lived</em> reality
@@ -79,7 +79,7 @@ export default async function HomePage() {
           </div>
           <div className="flex items-center gap-4">
             <div className="flex">
-              {['photo-1507003211169-0a1dd7228f2d','photo-1494790108755-2616b612b786','photo-1438761681033-6461ffad8d80','photo-1472099645785-5658abf4ff4e'].map((id,i)=>(
+              {['photo-1507003211169-0a1dd7228f2d','photo-1573496359142-b8d87734a5a2','photo-1438761681033-6461ffad8d80','photo-1472099645785-5658abf4ff4e'].map((id,i)=>(
                 <div key={i} className="w-8 h-8 rounded-full border-2 border-white overflow-hidden" style={{marginLeft:i>0?-8:0}}>
                   <img src={"https://images.unsplash.com/"+id+"?w=64&h=64&fit=crop&crop=face"} alt="" className="w-full h-full object-cover"/>
                 </div>

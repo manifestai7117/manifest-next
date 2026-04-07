@@ -17,14 +17,6 @@ const NAV = [
   { href:'/dashboard/profile',      label:'Profile',      d:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
 ]
 
-const BOTTOM_NAV = [
-  { href:'/dashboard',         label:'Home',    d:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10' },
-  { href:'/dashboard/goals',   label:'Goals',   d:'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 12h.01' },
-  { href:'/dashboard/coach',   label:'Coach',   d:'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
-  { href:'/dashboard/art',     label:'Art',     d:'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z' },
-  { href:'/dashboard/profile', label:'Profile', d:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
-]
-
 export default function DashboardShell({ children, profile }: { children: React.ReactNode; profile: any }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -162,21 +154,23 @@ export default function DashboardShell({ children, profile }: { children: React.
         {children}
       </main>
 
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-[#e8e8e8] flex items-center justify-around h-16">
-        {BOTTOM_NAV.map(({href,label,d})=>{
-          const active = pathname===href
-          return (
-            <Link key={href} href={href} className={`flex flex-col items-center gap-0.5 px-2 py-1 ${active?'text-[#111]':'text-[#bbb]'}`}>
-              <div className={`w-8 h-8 flex items-center justify-center rounded-xl ${active?'bg-[#111]':''}`}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={active?'white':'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  {d.split(' ').map((seg,i)=><path key={i} d={seg}/>)}
-                </svg>
-              </div>
-              <span className="text-[9px] font-medium">{label}</span>
-            </Link>
-          )
-        })}
+      {/* Mobile bottom nav - scrollable so all items visible */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-[#e8e8e8] h-16 overflow-x-auto">
+        <div className="flex items-center h-full px-2 gap-1 min-w-max mx-auto">
+          {NAV.map(({href,label,d})=>{
+            const active = pathname===href
+            return (
+              <Link key={href} href={href} className={`flex flex-col items-center gap-0.5 px-3 py-1 flex-shrink-0 ${active?'text-[#111]':'text-[#bbb]'}`}>
+                <div className={`w-8 h-8 flex items-center justify-center rounded-xl ${active?'bg-[#111]':''}`}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={active?'white':'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    {d.split(' ').map((seg,i)=><path key={i} d={seg}/>)}
+                  </svg>
+                </div>
+                <span className="text-[9px] font-medium whitespace-nowrap">{label}</span>
+              </Link>
+            )
+          })}
+        </div>
       </nav>
 
     </div>
