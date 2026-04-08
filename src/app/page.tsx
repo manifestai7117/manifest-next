@@ -29,6 +29,7 @@ const FALLBACK_STORIES = [
 export default async function HomePage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  const { data: userProfile } = user ? await supabase.from('profiles').select('full_name,avatar_url').eq('id', user.id).single() : { data: null }
   const { stories, userCount, goalCount } = await getPublicData()
   const displayStories = stories.length >= 2 ? stories : FALLBACK_STORIES
   const statUsers = Math.max(userCount, 12400)
@@ -46,7 +47,11 @@ export default async function HomePage() {
         <div className="flex gap-2 items-center">
           {user ? (
             <Link href="/dashboard" className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-[#111] text-white rounded-lg hover:bg-[#2a2a2a] transition-colors">
-              <div className="w-5 h-5 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[10px] font-bold">{user.email?.[0]?.toUpperCase()}</div>
+              {userProfile?.avatar_url ? (
+                <img src={userProfile.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover"/>
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[10px] font-bold">{userProfile?.full_name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase()}</div>
+              )}
               My dashboard
             </Link>
           ) : (
