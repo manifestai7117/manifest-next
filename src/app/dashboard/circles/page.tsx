@@ -28,8 +28,8 @@ export default function CirclesPage() {
       setMyCircleIds(m?.map((x: any) => x.circle_id) || [])
 
       // Real member counts
-      if (c?.data?.length || c?.length) {
-        const circles = c?.data || c
+      if (c?.length) {
+        const circles = c
         const counts: Record<string, number> = {}
         await Promise.all(circles.map(async (circle: any) => {
           const { count } = await supabase.from('circle_members').select('*', { count: 'exact', head: true }).eq('circle_id', circle.id)
