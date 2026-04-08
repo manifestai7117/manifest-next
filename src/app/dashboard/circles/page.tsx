@@ -16,6 +16,7 @@ export default function CirclesPage() {
   const [sending, setSending] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [showMembers, setShowMembers] = useState(false)
+  const [clearedAt, setClearedAt] = useState<Record<string, string>>({})
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -42,6 +43,22 @@ export default function CirclesPage() {
   }, [])
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('circle_cleared_at')
+      if (saved) try { setClearedAt(JSON.parse(saved)) } catch {}
+    }
+  }, [])
+
+  const clearMyView = (circleId: string) => {
+    const now = new Date().toISOString()
+    const updated = { ...clearedAt, [circleId]: now }
+    setClearedAt(updated)
+    if (typeof window !== 'undefined') localStorage.setItem('circle_cleared_at', JSON.stringify(updated))
+    setMsgs([])
+    toast.success('Chat cleared from your view — others still see it')
+  }
 
   // Realtime subscription
   useEffect(() => {
@@ -133,10 +150,12 @@ export default function CirclesPage() {
               <span>· {activeCircle.goal_description}</span>
             </div>
           </div>
-          <button onClick={() => setShowMembers(!showMembers)}
+          <div className="flex gap-2">
+            <button onClick={() => clearMyView(activeCircle.id)} className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#999] hover:bg-[#f8f7f5] transition-colors">Clear my view</button>
             className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
             {showMembers ? 'Hide members' : `Members (${memberCount})`}
           </button>
+          </div>
         </div>
 
         {/* Members panel */}
