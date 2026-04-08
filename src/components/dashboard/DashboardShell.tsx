@@ -17,6 +17,16 @@ const NAV = [
   { href:'/dashboard/profile',      label:'Profile',      d:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
 ]
 
+// Render SVG icon from path string — split on ' M' to handle multiple paths
+function NavIcon({ d, size = 16, color = 'currentColor' }: { d: string; size?: number; color?: string }) {
+  const paths = d.split(' M').map((p, i) => i === 0 ? p : 'M' + p)
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {paths.map((p, i) => <path key={i} d={p} />)}
+    </svg>
+  )
+}
+
 export default function DashboardShell({ children, profile }: { children: React.ReactNode; profile: any }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -34,7 +44,7 @@ export default function DashboardShell({ children, profile }: { children: React.
   return (
     <div className="flex min-h-screen bg-[#f8f7f5]">
 
-      {/* Desktop sidebar - hidden on mobile */}
+      {/* Desktop sidebar */}
       <aside className="hidden md:flex w-[220px] bg-white border-r border-[#e8e8e8] flex-col fixed top-0 left-0 h-full z-10 overflow-y-auto">
         <div className="px-5 py-5 border-b border-[#e8e8e8] flex-shrink-0">
           <Link href="/" className="font-serif text-[20px] text-[#111]">manifest<span className="text-[#b8922a]">.</span></Link>
@@ -44,9 +54,7 @@ export default function DashboardShell({ children, profile }: { children: React.
             const active = pathname===href
             return (
               <Link key={href} href={href} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${active?'bg-[#111] text-white':'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  {d.split(' ').map((seg,i)=><path key={i} d={seg}/>)}
-                </svg>
+                <NavIcon d={d} size={15} />
                 {label}
               </Link>
             )
@@ -124,9 +132,7 @@ export default function DashboardShell({ children, profile }: { children: React.
                 return (
                   <Link key={href} href={href} onClick={()=>setMenuOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl text-[14px] font-medium transition-all ${active?'bg-[#111] text-white':'text-[#666] hover:bg-[#f8f7f5]'}`}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      {d.split(' ').map((seg,i)=><path key={i} d={seg}/>)}
-                    </svg>
+                    <NavIcon d={d} size={16} color={active ? 'white' : 'currentColor'} />
                     {label}
                   </Link>
                 )
@@ -154,19 +160,17 @@ export default function DashboardShell({ children, profile }: { children: React.
         {children}
       </main>
 
-      {/* Mobile bottom nav - scrollable so all items visible */}
+      {/* Mobile bottom nav - scrollable */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-[#e8e8e8] h-16 overflow-x-auto">
-        <div className="flex items-center h-full px-2 gap-1 min-w-max mx-auto">
+        <div className="flex items-center h-full px-1 gap-0.5" style={{width:'max-content'}}>
           {NAV.map(({href,label,d})=>{
             const active = pathname===href
             return (
-              <Link key={href} href={href} className={`flex flex-col items-center gap-0.5 px-3 py-1 flex-shrink-0 ${active?'text-[#111]':'text-[#bbb]'}`}>
+              <Link key={href} href={href} className={`flex flex-col items-center gap-0.5 px-2.5 py-1 flex-shrink-0 ${active?'text-[#111]':'text-[#bbb]'}`}>
                 <div className={`w-8 h-8 flex items-center justify-center rounded-xl ${active?'bg-[#111]':''}`}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={active?'white':'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    {d.split(' ').map((seg,i)=><path key={i} d={seg}/>)}
-                  </svg>
+                  <NavIcon d={d} size={17} color={active?'white':'currentColor'} />
                 </div>
-                <span className="text-[9px] font-medium whitespace-nowrap">{label}</span>
+                <span className="text-[8px] font-medium whitespace-nowrap">{label}</span>
               </Link>
             )
           })}
