@@ -22,165 +22,178 @@ export async function POST(request: Request) {
     const falKey = process.env.FAL_KEY
     if (!falKey) return NextResponse.json({ error: 'FAL_KEY not configured' }, { status: 500 })
 
-    // Gender descriptor for scene
-    const gender = goal.user_gender
-    const isMale = gender === 'Man'
-    const isFemale = gender === 'Woman'
-    const genderWord = isMale ? 'man' : isFemale ? 'woman' : 'person'
-    const genderPronoun = isMale ? 'his' : isFemale ? 'her' : 'their'
+    // Build person descriptor
+    const gender = goal.user_gender && goal.user_gender !== 'Prefer not to say' ? goal.user_gender.toLowerCase() : 'person'
+    const isMale = gender === 'man'
+    const isFemale = gender === 'woman'
+    const age = goal.user_age_range ? `${goal.user_age_range}-year-old` : ''
+    const ethnicity = goal.user_ethnicity && goal.user_ethnicity !== 'Prefer not to say' ? goal.user_ethnicity : ''
+    const personDesc = [ethnicity, age, gender].filter(Boolean).join(' ')
 
-    // Aesthetic to photography style
+    // Aesthetic styles
     const aestheticStyle: Record<string, string> = {
-      'Minimal & clean':    'Kinfolk magazine editorial photography, soft diffused light, clean neutral tones, elegant and minimal',
-      'Bold & dark':        'dramatic cinematic photography, rich deep shadows, moody and powerful, Christopher Nolan film still quality',
-      'Warm & natural':     'golden hour photography, warm amber tones, analog film grain, emotionally resonant, National Geographic quality',
-      'Bright & energetic': 'vibrant Nike campaign photography, punchy colors, dynamic energy, electric and aspirational',
+      'Minimal & clean': 'Kinfolk magazine editorial, soft diffused light, clean neutral tones, elegant and minimal',
+      'Bold & dark': 'dramatic cinematic photography, rich shadows, moody and powerful, Christopher Nolan film still',
+      'Warm & natural': 'golden hour photography, warm amber tones, analog film grain, National Geographic quality',
+      'Bright & energetic': 'vibrant Nike campaign photography, punchy colors, dynamic energy, aspirational',
     }
     const style = aestheticStyle[goal.aesthetic] || aestheticStyle['Bright & energetic']
 
+    // Category + title based scene variations — multiple options per category for variety
     const category = (goal.category || '').toLowerCase()
     const title = (goal.title || '').toLowerCase()
-    const why = (goal.why || '').toLowerCase()
+    const regenCount = (goal.vision_board_regenerations || 0)
 
-    // Smart keyword matching — title takes priority over category
-    let scene = ''
+    // Scene variations — pick different one each regeneration
+    const getScene = (): string => {
+      const variation = regenCount % 4 // 4 variations per category
 
-    // CODING / PROGRAMMING / TECH
-    if (title.includes('cod') || title.includes('program') || title.includes('develop') || title.includes('software') || title.includes('tech') || title.includes('engineer') || title.includes('app') || title.includes('web') || (category.includes('career') && why.includes('cod'))) {
-      scene = `a ${genderWord} silhouette seen from behind, sitting at a sleek minimal desk with multiple monitors glowing with lines of code, dark room lit only by the blue-green screen light, city lights twinkling through floor-to-ceiling windows at night, ${genderPronoun} reflection faintly visible in the glass, intense focus and quiet determination`
+      if (title.includes('cod') || title.includes('program') || title.includes('develop') || title.includes('software') || title.includes('tech')) {
+        const scenes = [
+          `a ${personDesc} silhouette from behind at a sleek dark desk with three monitors glowing with code, city lights through floor-to-ceiling windows at night, blue-green screen light the only illumination`,
+          `a ${personDesc} silhouette hunched over a glowing laptop in a dark minimalist home office, neon city reflections in the window, lines of code reflected in the glass`,
+          `overhead view of ${personDesc} hands typing on a mechanical keyboard, multiple screens with terminal windows, late night atmosphere, a coffee cup steaming nearby`,
+          `a ${personDesc} silhouette standing at a large monitor wall displaying a live dashboard and code, dramatic backlighting, startup office aesthetic at golden hour`,
+        ]
+        return scenes[variation]
+      }
 
-    // MARATHON / RUNNING / FITNESS
-    } else if (title.includes('marathon') || title.includes('run') || title.includes('race') || title.includes('triathlon')) {
-      scene = `a ${genderWord} silhouette from behind crossing a marathon finish line at golden sunrise, arms raised in triumph, motion blur on ${genderPronoun} legs, golden mist rising from the track, stadium lights fading into dawn light, deeply emotional`
+      if (title.includes('marathon') || title.includes('run') || title.includes('race')) {
+        const scenes = [
+          `a ${personDesc} silhouette crossing a marathon finish line at golden sunrise, arms raised in triumph, motion blur on the legs, golden mist rising from the track`,
+          `a ${personDesc} silhouette from behind running alone on an empty coastal road at dawn, ocean on one side, dramatic sky`,
+          `close-up of ${personDesc} running shoes pounding the ground at speed, motion blur, early morning mist, urban marathon route`,
+          `a ${personDesc} silhouette running through a forest trail at golden hour, dappled light through trees, powerful stride, back to camera`,
+        ]
+        return scenes[variation]
+      }
 
-    // GYM / WEIGHT LOSS / FITNESS
-    } else if (title.includes('gym') || title.includes('weight') || title.includes('fit') || title.includes('muscle') || title.includes('body') || category.includes('health')) {
-      scene = `a ${genderWord} silhouette in a modern gym at sunrise, back to camera, standing before a large mirror, dramatic light cutting through floor-to-ceiling windows, equipment in soft focus, powerful and determined atmosphere`
+      if (title.includes('gym') || title.includes('fit') || title.includes('weight') || title.includes('body') || category.includes('health')) {
+        const scenes = [
+          `a ${personDesc} silhouette in a modern gym at sunrise, back to camera, standing before a mirror, dramatic light cutting through windows`,
+          `a ${personDesc} silhouette at the top of a mountain hike, arms outstretched, vast landscape below, golden hour`,
+          `a ${personDesc} silhouette doing yoga on a cliff edge at sunrise, ocean below, total peace and strength`,
+          `a ${personDesc} silhouette in a dark gym, dramatic spotlight, weights in foreground, powerful and determined`,
+        ]
+        return scenes[variation]
+      }
 
-    // FINANCIAL / WEALTH / MONEY
-    } else if (title.includes('financ') || title.includes('money') || title.includes('wealth') || title.includes('invest') || title.includes('save') || title.includes('rich') || category.includes('financial')) {
-      scene = `hands of a ${genderWord} holding a small thriving plant growing from rich soil placed on a clean marble surface, morning light streaming through a window, a blurred city skyline in background, symbolizing financial growth and abundance`
+      if (title.includes('business') || title.includes('startup') || title.includes('launch') || category.includes('career') || category.includes('business')) {
+        const scenes = [
+          `a ${personDesc} silhouette standing at floor-to-ceiling windows of a high-rise, back to camera, overlooking a glowing city at golden hour`,
+          `a ${personDesc} silhouette at a whiteboard covered in ideas, dramatic office light, city view behind, in deep thought`,
+          `a ${personDesc} silhouette shaking hands across a boardroom table, city skyline at dusk through windows, powerful and confident`,
+          `a ${personDesc} silhouette walking purposefully through a glass office building lobby, dramatic architectural light`,
+        ]
+        return scenes[variation]
+      }
 
-    // STARTUP / BUSINESS / LAUNCH
-    } else if (title.includes('startup') || title.includes('launch') || title.includes('business') || title.includes('company') || title.includes('found') || title.includes('brand') || category.includes('business')) {
-      scene = `a ${genderWord} silhouette standing confidently at floor-to-ceiling windows of a high-rise, back to camera, overlooking a glowing city skyline at golden hour, ${genderPronoun} reflection visible in the glass, a whiteboard with ideas faintly visible behind`
+      if (title.includes('travel') || title.includes('trip') || title.includes('italy') || title.includes('europe') || category.includes('travel')) {
+        const scenes = [
+          `a ${personDesc} silhouette standing at the edge of a cliff overlooking a turquoise Mediterranean sea, back to camera, clothes billowing in the breeze`,
+          `a ${personDesc} silhouette on a cobblestone street in an ancient European city at golden hour, warm light, total freedom`,
+          `a ${personDesc} silhouette at the bow of a boat on crystal clear water, islands in the distance, golden afternoon light`,
+          `a ${personDesc} silhouette on top of a mountain overlooking a valley with a historic village, dramatic sky`,
+        ]
+        return scenes[variation]
+      }
 
-    // WRITING / BOOK / NOVEL
-    } else if (title.includes('write') || title.includes('novel') || title.includes('book') || title.includes('author') || title.includes('publish')) {
-      scene = `${genderWord}'s hands typing on a vintage typewriter on a wooden desk beside a rain-streaked window, morning light, a steaming coffee cup, stacked books in soft focus, creative and cozy atmosphere, cinematic warmth`
+      if (title.includes('write') || title.includes('novel') || title.includes('book') || title.includes('author')) {
+        const scenes = [
+          `${personDesc} hands typing on a vintage typewriter by a rain-streaked window, morning light, steaming coffee, stacked books in soft focus`,
+          `a ${personDesc} silhouette at a writing desk in a cozy study, warm lamplight, bookshelves floor to ceiling, deep in thought`,
+          `overhead of ${personDesc} hands writing in a leather journal at a cafe table, morning light, coffee and flowers`,
+          `a ${personDesc} silhouette at a standing desk by a large window overlooking trees, laptop open, golden hour`,
+        ]
+        return scenes[variation]
+      }
 
-    // MUSIC
-    } else if (title.includes('music') || title.includes('sing') || title.includes('guitar') || title.includes('piano') || title.includes('album') || title.includes('band')) {
-      scene = `a ${genderWord} musician silhouette on a stage, back to the crowd, spotlight cutting through dramatic smoke, thousands of blurred lights stretching into the darkness, arms outstretched, pure euphoria`
+      if (title.includes('music') || title.includes('sing') || title.includes('guitar') || title.includes('album')) {
+        const scenes = [
+          `a ${personDesc} musician silhouette on a stage, back to the crowd, spotlight through dramatic smoke, thousands of blurred lights`,
+          `a ${personDesc} silhouette playing guitar in a dark recording studio, dramatic lighting, equipment in background`,
+          `a ${personDesc} silhouette at a piano in a sunlit room, back to camera, sheet music, golden afternoon light`,
+          `a ${personDesc} silhouette performing on an outdoor stage at sunset, crowd silhouettes in foreground, dramatic sky`,
+        ]
+        return scenes[variation]
+      }
 
-    // TRAVEL
-    } else if (title.includes('travel') || title.includes('italy') || title.includes('europe') || title.includes('trip') || title.includes('visit') || title.includes('world') || category.includes('travel')) {
-      scene = `a ${genderWord} silhouette standing at the edge of a sun-drenched cliff, back to camera, overlooking a breathtaking turquoise Mediterranean coastline, light clothes billowing in the breeze, pure freedom`
-
-    // CREATIVE ART / DESIGN
-    } else if (title.includes('design') || title.includes('creat') || title.includes('art') || title.includes('paint') || category.includes('creative')) {
-      scene = `a ${genderWord} silhouette from behind, standing in front of a massive canvas in a sunlit studio, paint-streaked walls, warm afternoon light streaming through tall windows, creating something extraordinary`
-
-    // LEARNING / EDUCATION / DEGREE
-    } else if (title.includes('learn') || title.includes('study') || title.includes('degree') || title.includes('graduate') || title.includes('course') || category.includes('learning')) {
-      scene = `a ${genderWord} silhouette in a grand university lecture hall, back to camera, walking toward a bright light at the end of a long corridor lined with doors of opportunity, symbolic and aspirational`
-
-    // PERSONAL GROWTH / MINDSET / MEDITATION
-    } else if (title.includes('meditat') || title.includes('mindset') || title.includes('confidence') || title.includes('mental') || category.includes('personal')) {
-      scene = `a ${genderWord} silhouette sitting in meditation on a mountain summit at sunrise, back to camera, legs crossed, arms resting on knees, vast misty valley stretching below, golden rays breaking through dramatic clouds`
-
-    // RELATIONSHIP
-    } else if (category.includes('relationship') || title.includes('love') || title.includes('family') || title.includes('partner') || title.includes('friend')) {
-      scene = `two silhouettes on a hilltop at sunset, sitting side by side, back to camera, wildflowers in foreground, vast golden landscape, warmth and deep human connection radiating from the scene`
-
-    // DEFAULT — use art description or make something symbolic
-    } else {
-      const artDesc = goal.art_description || ''
-      scene = artDesc.length > 30
-        ? `${artDesc}, ${genderWord} silhouette, back to camera, no faces, dreamlike and cinematic`
-        : `a ${genderWord} silhouette standing at the threshold of a vast glowing horizon, back to camera, arms slightly raised, golden light flooding the scene, representing the achievement of ${goal.title}`
+      // Default symbolic scene
+      const defaults = [
+        `a ${personDesc} silhouette standing at the threshold of a vast glowing horizon, back to camera, arms slightly raised, golden light flooding the scene`,
+        `a ${personDesc} silhouette on a hilltop at sunrise, back to camera, vast misty valley below, rays of sun breaking through clouds`,
+        `a ${personDesc} silhouette walking toward a bright doorway of light, back to camera, symbolic and aspirational`,
+        `a ${personDesc} silhouette at the edge of a calm lake at golden hour, back to camera, perfect reflection, total peace`,
+      ]
+      return defaults[variation]
     }
+
+    const scene = getScene()
 
     const prompt = [
       `Breathtaking ${style}.`,
       `${scene}.`,
       `Shot on Hasselblad H6D medium format camera, 85mm lens, f/1.4 aperture, beautiful bokeh.`,
-      `Cinematic color grading, film quality, deeply emotional.`,
-      `Subject seen from behind or as a silhouette — absolutely no faces visible.`,
-      `No text, no letters, no numbers, no words, no signs anywhere in the image.`,
-      `Motivational, dreamlike, and deeply aspirational.`,
+      `Cinematic color grading, deeply emotional and aspirational.`,
+      `Subject seen from behind or as silhouette — no faces visible.`,
+      `No text, no letters, no numbers, no words anywhere in the image.`,
       `The kind of image that makes you believe anything is possible.`,
       `Ultra high resolution, award-winning photography.`,
     ].join(' ')
 
     const negativePrompt = [
-      'face, faces, portrait, frontal view, looking at camera, eyes, nose, mouth',
-      'female, woman, girl, lady',  // only add opposite gender to negative
-      'text, letters, words, numbers, signs, labels, captions, watermark, logo, brand',
-      'ugly, deformed, distorted, bad anatomy, extra limbs',
-      'cartoon, anime, illustration, painting, CGI, 3D render, sketch',
+      'face, faces, frontal view, looking at camera',
+      isMale ? 'woman, female, girl' : isFemale ? 'man, male, boy' : '',
+      'text, letters, words, numbers, signs, watermark, logo',
+      'ugly, deformed, distorted, bad anatomy',
+      'cartoon, anime, illustration, CGI, 3D render, sketch',
       'low quality, blurry, grainy, pixelated',
       'dark, gloomy, depressing, scary',
       'stock photo, generic, cheesy',
-    ]
+    ].filter(Boolean).join(', ')
 
-    // Remove opposite gender from negative prompt based on user
-    const finalNegative = isMale
-      ? negativePrompt.filter(p => !p.includes('female')) // keep female in negative for male user
-      : isFemale
-        ? [...negativePrompt.filter(p => !p.includes('female')), 'man, male, boy, masculine']
-        : negativePrompt.filter(p => !p.includes('female'))
+    console.log(`Generating art for: ${goal.title} (regen #${regenCount + 1})`)
 
-    console.log('Generating art for:', goal.title, '| Gender:', genderWord)
-    console.log('Scene:', scene.slice(0, 120))
+    // Try flux/dev first, fall back to schnell
+    let imageUrl: string | null = null
 
-    const falResponse = await fetch('https://fal.run/fal-ai/flux/dev', {
+    const falRes = await fetch('https://fal.run/fal-ai/flux/dev', {
       method: 'POST',
-      headers: {
-        'Authorization': `Key ${falKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Key ${falKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt,
-        negative_prompt: finalNegative.join(', '),
+        negative_prompt: negativePrompt,
         image_size: 'portrait_4_3',
-        num_inference_steps: 35,
-        guidance_scale: 4.0,
+        num_inference_steps: 28,
+        guidance_scale: 3.5,
         num_images: 1,
         enable_safety_checker: true,
         output_format: 'jpeg',
+        seed: Math.floor(Math.random() * 999999), // different seed every time
       }),
       signal: AbortSignal.timeout(90000),
     })
 
-    let imageUrl: string | null = null
-
-    if (falResponse.ok) {
-      const falData = await falResponse.json()
-      imageUrl = falData.images?.[0]?.url || null
+    if (falRes.ok) {
+      const data = await falRes.json()
+      imageUrl = data.images?.[0]?.url || null
     } else {
-      const errText = await falResponse.text()
-      console.error('flux/dev failed:', falResponse.status, errText.slice(0, 300))
-
+      const errText = await falRes.text()
+      console.error('flux/dev failed:', errText.slice(0, 200))
       // Fallback to schnell
       const fallback = await fetch('https://fal.run/fal-ai/flux/schnell', {
         method: 'POST',
         headers: { 'Authorization': `Key ${falKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          image_size: 'portrait_4_3',
-          num_inference_steps: 8,
-          num_images: 1,
-          enable_safety_checker: true,
-        }),
+        body: JSON.stringify({ prompt, image_size: 'portrait_4_3', num_inference_steps: 8, num_images: 1, seed: Math.floor(Math.random() * 999999) }),
         signal: AbortSignal.timeout(60000),
       })
-      if (!fallback.ok) {
+      if (fallback.ok) {
+        const data = await fallback.json()
+        imageUrl = data.images?.[0]?.url || null
+      } else {
         const fbErr = await fallback.text()
-        return NextResponse.json({ error: 'Image generation failed: ' + fbErr.slice(0, 200) }, { status: 500 })
+        return NextResponse.json({ error: fbErr.slice(0, 200) }, { status: 500 })
       }
-      const fbData = await fallback.json()
-      imageUrl = fbData.images?.[0]?.url || null
     }
 
     if (!imageUrl) return NextResponse.json({ error: 'No image returned' }, { status: 500 })
@@ -192,9 +205,7 @@ export async function POST(request: Request) {
       if (imgRes.ok) {
         const buf = await imgRes.arrayBuffer()
         const path = `${user.id}/${goalId}-${Date.now()}.jpg`
-        const { error: upErr } = await supabase.storage
-          .from('vision-art')
-          .upload(path, buf, { contentType: 'image/jpeg', upsert: true })
+        const { error: upErr } = await supabase.storage.from('vision-art').upload(path, buf, { contentType: 'image/jpeg', upsert: true })
         if (!upErr) {
           const { data: { publicUrl } } = supabase.storage.from('vision-art').getPublicUrl(path)
           finalUrl = publicUrl
@@ -202,6 +213,7 @@ export async function POST(request: Request) {
       }
     } catch { /* use fal URL */ }
 
+    // Save to goal
     await supabase.from('goals').update({
       art_image_url: finalUrl,
       vision_board_last_generated: new Date().toISOString(),
