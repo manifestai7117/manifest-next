@@ -22,10 +22,8 @@ export default function CirclesPage() {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-      const { data: c } = await supabase.from('circles').select('*, creator:profiles!circles_created_by_fkey(id,full_name,avatar_url)').order('created_at', { ascending: false }).catch(() =>
-        supabase.from('circles').select('*').order('created_at', { ascending: false })
-      ) as any
-      setCircles(c?.data || c || [])
+      const { data: c } = await supabase.from('circles').select('*').order('created_at', { ascending: false })
+      setCircles(c || [])
       const { data: m } = await supabase.from('circle_members').select('circle_id').eq('user_id', user?.id)
       setMyCircleIds(m?.map((x: any) => x.circle_id) || [])
 
