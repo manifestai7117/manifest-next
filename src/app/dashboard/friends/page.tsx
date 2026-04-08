@@ -13,6 +13,7 @@ export default function FriendsPage() {
   const [activeChat, setActiveChat] = useState<any>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [sharedCircles, setSharedCircles] = useState<Record<string, any[]>>({})
+  const [dmClearedAt, setDmClearedAt] = useState<Record<string, string>>({})
   const [inp, setInp] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -71,6 +72,12 @@ export default function FriendsPage() {
     load()
   }, [])
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try { const s = localStorage.getItem('dm_cleared_at'); if (s) setDmClearedAt(JSON.parse(s)) } catch {}
+    }
+  }, [])
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   // Realtime for DMs
@@ -117,6 +124,15 @@ export default function FriendsPage() {
     toast.success('Unfriended')
   }
 
+  const clearDM = (friendId: string) => {
+    const now = new Date().toISOString()
+    const updated = { ...dmClearedAt, [friendId]: now }
+    setDmClearedAt(updated)
+    if (typeof window !== 'undefined') localStorage.setItem('dm_cleared_at', JSON.stringify(updated))
+    setMessages([])
+    toast.success('Chat cleared from your view')
+  }
+
   const openChat = async (friend: any) => {
     setActiveChat(friend)
     setTab('messages')
@@ -126,7 +142,9 @@ export default function FriendsPage() {
       .or(`and(sender_id.eq.${user.id},recipient_id.eq.${friend.id}),and(sender_id.eq.${friend.id},recipient_id.eq.${user.id})`)
       .order('created_at', { ascending: true })
       .limit(50)
-    setMessages(msgs || [])
+    const cleared = dmClearedAt[friend.id]
+    const visible = (msgs || []).filter((m: any) => !cleared || new Date(m.created_at) > new Date(cleared))
+    setMessages(visible)
     await supabase.from('direct_messages').update({ read: true }).eq('recipient_id', user.id).eq('sender_id', friend.id)
   }
 
@@ -260,6 +278,7 @@ export default function FriendsPage() {
                 <button onClick={() => setActiveChat(null)} className="text-[#999] hover:text-[#111] text-[18px] mr-1">←</button>
                 {avatarEl(activeChat)}
                 <div><p className="text-[14px] font-medium">{activeChat.full_name}</p><p className="text-[11px] text-green-500">● Active</p></div>
+                <button onClick={() => clearDM(activeChat.id)} className="ml-auto text-[12px] text-[#999] hover:text-[#666] px-3 py-1.5 border border-[#e8e8e8] rounded-full hover:border-[#d0d0d0] transition-colors">Clear</button>
               </div>
               <div className="h-[380px] overflow-y-auto p-5 flex flex-col gap-3">
                 {messages.length === 0 && <div className="text-center text-[#999] text-[13px] mt-8">Start the conversation!</div>}

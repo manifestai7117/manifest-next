@@ -4,87 +4,147 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
-// Large pools per category — NO FACES, all landscapes/objects/environments
-// Seeded shuffle picks 6 unique images every regeneration
-const POOLS: Record<string, string[]> = {
-  coding: [
-    'photo-1555066931-4365d14bab8c','photo-1461749280684-dccba630e2f6','photo-1517694712202-14dd9538aa97',
-    'photo-1498050108023-c5249f4df085','photo-1542831371-29b0f74f9713','photo-1537432376769-00f5c2f4c8d2',
-    'photo-1484417894907-623942c8ee29','photo-1518770660439-4636190af475','photo-1526374965328-7f61d4dc18c5',
-    'photo-1550439062-609e1531270e','photo-1523800503107-5bc3ba2a6f81','photo-1504868584819-f8e8b4b6d7e3',
-    'photo-1451187580459-43490279c0fa','photo-1563986768609-322da13575f3','photo-1629904853893-c2c8981a1dc5',
-    'photo-1607798748738-b15c40d33d57','photo-1571171637578-41bc2dd41cd2','photo-1593720213428-28a5b9e94613',
-  ],
-  running: [
-    'photo-1476480862126-209bfaa8edc8','photo-1502904550040-7534597429ae','photo-1483721310020-03333e577078',
-    'photo-1530143584546-02191bc84eb5','photo-1571019613454-1cb2f99b2d8b','photo-1558618666-fcd25c85cd64',
-    'photo-1476520221767-8f3788ea43ed','photo-1461897104016-0b3b00cc81ee','photo-1552674605-db6ffd4facb5',
-    'photo-1594882645126-14ac19a3b2c4','photo-1517438476312-10d79c077509','photo-1587280501635-68a0e82cd5ff',
-    'photo-1593007791459-4b05e1158229','photo-1544717305-2782549b5136','photo-1473091534298-04dcbce3278c',
-    'photo-1571008887538-b36bb32f4571','photo-1506126613408-eca07ce68773','photo-1449130561867-97e27a42e09a',
-  ],
-  fitness: [
-    'photo-1534438327276-14e5300c3a48','photo-1540497077202-7c8a3999166f','photo-1517836357463-d25dfeac3438',
-    'photo-1549060279-7e168fcee0c2','photo-1558618666-fcd25c85cd64','photo-1518611012118-696072aa579a',
-    'photo-1574680096145-d05b474e2155','photo-1581009137042-c552e485697a','photo-1526506118085-60ce8714f8c5',
-    'photo-1550345332-09e3ac987658','photo-1584735935682-2f2b69dff9d2','photo-1483721310020-03333e577078',
-    'photo-1476480862126-209bfaa8edc8','photo-1530143584546-02191bc84eb5','photo-1605296867304-46d5465a13f1',
-    'photo-1571019614242-c5c5dee9f50b','photo-1567013127542-490d757e51cd','photo-1559841644-08984562005d',
-    'photo-1544717305-2782549b5136','photo-1473091534298-04dcbce3278c','photo-1506126613408-eca07ce68773',
-    'photo-1449130561867-97e27a42e09a','photo-1594882645126-14ac19a3b2c4','photo-1571019613454-1cb2f99b2d8b',
-  ],
-  travel: [
-    'photo-1476514525535-07fb3b4ae5f1','photo-1499678329028-101435549a4e','photo-1506905925346-21bda4d32df4',
-    'photo-1530521954074-e64f6810b32d','photo-1523906834658-6e24ef2386f9','photo-1527631746610-bca00a040d60',
-    'photo-1500835556837-99ac94a94552','photo-1469854523086-cc02fe5d8800','photo-1504150558240-0b4fd8946624',
-    'photo-1507525428034-b723cf961d3e','photo-1534430480872-3498386e7856','photo-1488085061387-422e29b40080',
-    'photo-1519451241324-20b4ea2c4220','photo-1513407030348-c983a97b98d8','photo-1502791451862-7bd8c1df43a7',
-    'photo-1517760444937-f6397edcbbcd','photo-1533105079780-92b9be482077','photo-1504019347908-b45f9b0b8dd5',
-    'photo-1465146344425-f00d5f5c8f07','photo-1501854140801-50d01698950b','photo-1470770841072-f978cf4d019e',
-  ],
-  business: [
-    'photo-1486312338219-ce68d2c6f44d','photo-1556761175-4b46a572b786','photo-1553484771-371a605b060b',
-    'photo-1520333789090-1afc82db536a','photo-1454165804606-c3d57bc86b40','photo-1542744094-3a31f272c490',
-    'photo-1497366216548-37526070297c','photo-1497366754035-f200968a6e72','photo-1504384308090-c894fdcc538d',
-    'photo-1560472354-b33ff0c44a43','photo-1542744173-8e7e53415bb0','photo-1519389950473-47ba0277781c',
-    'photo-1573165067541-4cd6d9837902','photo-1600880292203-757bb62b4baf','photo-1517245386807-bb43f82c33c4',
-    'photo-1521737604893-d14cc237f11d','photo-1522071820081-009f0129c71c','photo-1507679799987-c73779587ccf',
-  ],
-  default: [
-    'photo-1499346030926-9a72daac6c63','photo-1483728642387-6c3bdd6c93e5','photo-1455390582262-044cdead277a',
-    'photo-1504805572947-34fad45aed93','photo-1511367461989-f85a21fda167','photo-1502139214982-d0ad755818d8',
-    'photo-1518495973542-4542c06a5843','photo-1519834785169-98be25ec3f84','photo-1532274402911-5a369e4c4bb5',
-    'photo-1473621038790-b778b4282e68','photo-1476611338391-6f395a0ebc7b','photo-1504196606672-aef5c9cefc92',
-    'photo-1495616811223-4d98c6e9c869','photo-1470770841072-f978cf4d019e','photo-1501854140801-50d01698950b',
-    'photo-1465146344425-f00d5f5c8f07','photo-1444464666168-49d633b86797','photo-1500534314209-a25ddb2bd429',
-    'photo-1476514525535-07fb3b4ae5f1','photo-1527631746610-bca00a040d60','photo-1506905925346-21bda4d32df4',
-  ],
-}
-
-// Seeded pseudo-random shuffle — same seed = same order, different seed = different order
-function seededShuffle(arr: string[], seed: number): string[] {
-  const a = [...arr]
-  let s = seed + 1
-  for (let i = a.length - 1; i > 0; i--) {
-    s = (s * 1664525 + 1013904223) & 0xffffffff
-    const j = Math.abs(s) % (i + 1);
-    [a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
-function getCollageImgs(goal: any, regenCount: number): string[] {
+// Extract smart search keywords from goal title
+// Returns array of 6 different search terms — each specific to the goal
+function getSearchTerms(goal: any, regenCount: number): string[] {
   const t = (goal?.title || '').toLowerCase()
   const c = (goal?.category || '').toLowerCase()
-  let key = 'default'
-  if (t.includes('cod') || t.includes('program') || t.includes('develop') || t.includes('software') || t.includes('tech')) key = 'coding'
-  else if (t.includes('run') || t.includes('marathon') || t.includes('race')) key = 'running'
-  else if (t.includes('gym') || t.includes('fit') || t.includes('weight') || t.includes('body') || c.includes('health')) key = 'fitness'
-  else if (t.includes('travel') || t.includes('trip') || c.includes('travel')) key = 'travel'
-  else if (t.includes('business') || t.includes('startup') || c.includes('career') || c.includes('business')) key = 'business'
-  // Use regenCount as seed — each count gives completely different 6 images
-  const shuffled = seededShuffle(POOLS[key], regenCount * 7 + 3)
-  return shuffled.slice(0, 6)
+  const why = (goal?.why || '').toLowerCase()
+
+  // Sports detection
+  const sports: Record<string, string[]> = {
+    tennis: ['tennis court sunset','tennis racket ball','tennis player training','tennis match competition','tennis practice court','tennis serve action'],
+    golf: ['golf course fairway','golf swing sunset','golf green hole flag','golf ball fairway','golf training practice','golf tournament course'],
+    basketball: ['basketball court hoop','basketball training dribble','basketball slam dunk','basketball player practice','basketball game action','basketball court night'],
+    soccer: ['soccer field sunset','soccer ball training','soccer player dribbling','soccer match stadium','soccer practice drill','soccer goal celebration'],
+    football: ['football field lights','football player running','football practice drill','football stadium crowd','football touchdown moment','football team training'],
+    swimming: ['swimming pool lane','swimmer racing water','swimming training pool','swim competition race','swimmer diving pool','swimming underwater blue'],
+    cycling: ['cycling road mountain','cyclist racing road','bicycle trail outdoor','cycling training route','cyclist mountain road','road cycling sunset'],
+    yoga: ['yoga pose sunrise','yoga meditation peace','yoga mat nature','yoga stretch outdoor','yoga practice studio','yoga mindfulness calm'],
+    meditation: ['meditation sunrise peaceful','meditation nature calm','mindfulness practice peace','meditation cushion morning','meditation breathing calm','mindfulness outdoor nature'],
+    marathon: ['marathon runner finish line','running race crowd','marathon training road','runner silhouette sunrise','marathon race morning','long distance running path'],
+    climbing: ['rock climbing wall','mountain climbing adventure','climbing gear outdoor','bouldering climbing gym','rock climbing nature','climbing summit mountain'],
+    boxing: ['boxing gym training','boxing ring practice','boxing gloves workout','boxing training session','boxer training bag','boxing fitness training'],
+    surfing: ['surfing wave ocean','surfer riding wave','surfing beach sunset','surfboard ocean wave','surfer silhouette sunset','surfing ocean adventure'],
+  }
+
+  // Check for specific sport
+  for (const [sport, terms] of Object.entries(sports)) {
+    if (t.includes(sport)) {
+      const offset = regenCount * 2
+      return terms.map((term, i) => terms[(i + offset) % terms.length])
+    }
+  }
+
+  // Category-based terms
+  if (t.includes('cod') || t.includes('program') || t.includes('develop') || t.includes('software') || t.includes('tech') || t.includes('app')) {
+    const sets = [
+      ['coding workspace night','programming dark monitor','developer laptop code','software development desk','coding setup minimal','tech workspace aesthetic'],
+      ['code on screen dark','programming multiple monitors','developer home office','laptop code terminal','tech startup workspace','coding late night'],
+      ['software engineering desk','programming keyboard dark','developer tools workspace','code review screen','tech office minimal','coding environment setup'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (t.includes('run') || t.includes('marathon') || t.includes('5k') || t.includes('10k') || t.includes('race')) {
+    const sets = [
+      ['runner silhouette sunrise','running road morning','marathon finish line','running shoes pavement','runner trail forest','running motivation path'],
+      ['running track stadium','marathon training road','runner misty morning','running shoes closeup','trail running mountain','runner city bridge'],
+      ['running race crowd','early morning run','runner shadow road','marathon runner pack','running motivation quote','runner finish line triumph'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (t.includes('gym') || t.includes('fit') || t.includes('muscle') || t.includes('weight') || t.includes('body') || t.includes('fat') || t.includes('lean') || t.includes('physique')) {
+    const sets = [
+      ['gym equipment weights','fitness training barbell','workout motivation gym','fitness aesthetic body','weight training equipment','gym workout session'],
+      ['barbell squat rack','fitness gym interior','weight room training','gym motivation equipment','strength training weights','fitness bodybuilding gym'],
+      ['dumbbell rack gym','functional fitness training','gym mirror workout','fitness progress journey','strength equipment gym','athletic training gym'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (t.includes('travel') || t.includes('trip') || t.includes('visit') || t.includes('explore') || c.includes('travel')) {
+    const sets = [
+      ['travel adventure landscape','mountain travel scenic','travel destination beautiful','backpacking adventure nature','travel road trip scenic','wanderlust destination explore'],
+      ['travel ocean coast cliff','european travel city','travel tropical paradise','adventure travel hiking','travel photography landscape','cultural travel destination'],
+      ['travel sunrise mountain','solo travel adventure','travel bucket list scenic','exotic travel destination','travel nature landscape','world travel adventure'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (t.includes('business') || t.includes('startup') || t.includes('company') || t.includes('launch') || t.includes('entrepreneur') || t.includes('found')) {
+    const sets = [
+      ['entrepreneur office city view','startup workspace modern','business success meeting','entrepreneur working laptop','modern office workspace','business growth chart'],
+      ['startup office team','entrepreneur vision board','business meeting boardroom','office city skyline view','professional workspace desk','entrepreneur success journey'],
+      ['business strategy planning','startup launch moment','entrepreneur morning routine','business office aesthetic','success mindset workspace','professional growth journey'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (t.includes('write') || t.includes('novel') || t.includes('book') || t.includes('author') || t.includes('publish')) {
+    const sets = [
+      ['writing desk morning coffee','author notebook pen','writing inspiration desk','book writing cozy study','typewriter desk vintage','writing creative space'],
+      ['books stacked desk lamp','writing journal morning','author desk window view','literary writing space','notebook pen coffee shop','writing cozy atmosphere'],
+      ['book manuscript desk','creative writing space','author morning writing','bookshelf writing desk','journaling morning light','writing inspiration cozy'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (t.includes('music') || t.includes('sing') || t.includes('guitar') || t.includes('piano') || t.includes('album') || t.includes('band')) {
+    const sets = [
+      ['guitar music studio','piano keys music','music studio recording','guitar sunset aesthetic','music performance stage','musician practice studio'],
+      ['music studio microphone','piano music keys dark','guitar player silhouette','music recording session','stage music performance','musician creating music'],
+      ['acoustic guitar close','music studio equipment','piano keys dramatic light','musician stage spotlight','music creation process','guitar music aesthetic'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (t.includes('learn') || t.includes('study') || t.includes('degree') || t.includes('course') || t.includes('skill') || t.includes('master')) {
+    const sets = [
+      ['study desk books morning','learning education books','student studying focused','knowledge books library','study motivation desk','learning growth mindset'],
+      ['library books studying','education learning desk','focused study session','books knowledge growth','academic study space','learning journey books'],
+      ['study notes desk coffee','knowledge learning path','student motivation books','education desk lamp','study aesthetic morning','learning progress journey'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (t.includes('finance') || t.includes('money') || t.includes('invest') || t.includes('save') || t.includes('wealth') || t.includes('income') || t.includes('rich')) {
+    const sets = [
+      ['financial growth chart','wealth building investment','money success motivation','financial freedom goal','investment growth plant','financial planning desk'],
+      ['stock market trading','financial success journey','wealth management desk','money growth investment','financial independence goal','investment portfolio growth'],
+      ['financial planning morning','wealth building strategy','money mindset success','financial goal achievement','investment returns growth','financial freedom path'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  if (c.includes('health') || t.includes('health') || t.includes('diet') || t.includes('nutrition') || t.includes('sleep') || t.includes('stress') || t.includes('mental')) {
+    const sets = [
+      ['healthy lifestyle morning','wellness routine sunrise','healthy food nutrition','mindfulness nature calm','healthy living outdoor','wellness morning routine'],
+      ['healthy breakfast morning','wellness practice yoga','nature walk mindfulness','healthy lifestyle choice','morning routine wellness','clean eating healthy food'],
+      ['wellness spa calm','healthy mind body spirit','nature therapy calm','mindfulness practice morning','healthy lifestyle motivation','wellness journey path'],
+    ]
+    return sets[regenCount % sets.length]
+  }
+
+  // Generic but goal-aware default — extract key nouns from title
+  const titleWords = goal.title.split(' ')
+    .filter((w: string) => w.length > 3 && !['want','will','from','with','into','that','this','your','have','been','goal'].includes(w.toLowerCase()))
+    .slice(0, 3)
+    .join(' ')
+
+  const defaults = [
+    [`${titleWords} motivation inspiration`, 'goal achievement success', 'personal growth journey', 'success mindset motivation', 'achievement celebration moment', 'goal progress milestone'],
+    [`${titleWords} success journey`, 'motivation determination focus', 'goal setting achievement', 'personal development growth', 'success celebration moment', 'achievement milestone path'],
+    [`${titleWords} progress journey`, 'achievement success path', 'growth mindset motivation', 'goal achievement celebration', 'personal success journey', 'determination focus success'],
+  ]
+  return defaults[regenCount % defaults.length]
+}
+
+// Build Unsplash source URL — unique per position using seed
+function imgUrl(searchTerm: string, seed: number, w = 800, h = 800): string {
+  const encoded = encodeURIComponent(searchTerm.trim())
+  return `https://source.unsplash.com/featured/${w}x${h}/?${encoded}&sig=${seed}`
 }
 
 export default function ArtPage() {
@@ -95,6 +155,7 @@ export default function ArtPage() {
   const [generating, setGenerating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [regenCount, setRegenCount] = useState(0)
+  const [imgSeeds, setImgSeeds] = useState<number[]>([1,2,3,4,5,6])
   const collageRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -109,7 +170,12 @@ export default function ArtPage() {
       setProfile(prof)
       const savedId = typeof window !== 'undefined' ? localStorage.getItem('selectedGoalId') : null
       const g = gs?.find((x: any) => x.id === savedId) || gs?.[0] || null
-      if (g) { setSelectedGoal(g); setRegenCount(g.vision_board_regenerations || 0) }
+      if (g) {
+        setSelectedGoal(g)
+        const rc = g.vision_board_regenerations || 0
+        setRegenCount(rc)
+        setImgSeeds(Array.from({length: 6}, (_, i) => rc * 100 + i + 1))
+      }
       setLoading(false)
     }
     load()
@@ -117,73 +183,60 @@ export default function ArtPage() {
 
   const selectGoal = (g: any) => {
     setSelectedGoal(g)
-    setRegenCount(g.vision_board_regenerations || 0)
+    const rc = g.vision_board_regenerations || 0
+    setRegenCount(rc)
+    setImgSeeds(Array.from({length: 6}, (_, i) => rc * 100 + i + 1))
     if (typeof window !== 'undefined') localStorage.setItem('selectedGoalId', g.id)
   }
 
   const generate = async () => {
     if (!selectedGoal || generating) return
     setGenerating(true)
+    const newCount = regenCount + 1
+    // New seeds = completely different images
+    setRegenCount(newCount)
+    setImgSeeds(Array.from({length: 6}, (_, i) => newCount * 100 + i + Date.now() % 100))
     try {
-      const res = await fetch('/api/vision-art/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goalId: selectedGoal.id }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Generation failed')
-      const newCount = (selectedGoal.vision_board_regenerations || 0) + 1
+      await supabase.from('goals').update({
+        vision_board_regenerations: newCount,
+        vision_board_last_generated: new Date().toISOString(),
+      }).eq('id', selectedGoal.id)
       const updated = { ...selectedGoal, vision_board_regenerations: newCount }
       setSelectedGoal(updated)
-      setRegenCount(newCount)
       setGoals(gs => gs.map(g => g.id === selectedGoal.id ? updated : g))
-      toast.success('Vision board refreshed!')
-    } catch (e: any) {
-      // Even if AI fails, just cycle to next collage set
-      const newCount = (selectedGoal.vision_board_regenerations || 0) + 1
-      setRegenCount(newCount)
-      setSelectedGoal((g: any) => ({ ...g, vision_board_regenerations: newCount }))
-      await supabase.from('goals').update({ vision_board_regenerations: newCount }).eq('id', selectedGoal.id)
       toast.success('Vision board refreshed with new images!')
-    }
+    } catch {}
     setGenerating(false)
   }
 
-  const downloadCollage = async () => {
+  const downloadCollage = () => {
     const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
-    if (!isPro) { toast.error('Download is a Pro feature — upgrade to download your board'); return }
-    if (!collageRef.current) return
-    toast('Preparing download...')
-    try {
-      // Use native browser print as canvas approach
-      const imgs = getCollageImgs(selectedGoal, regenCount)
-      // Open a new window with just the collage for saving
-      const win = window.open('', '_blank')
-      if (!win) { toast.error('Please allow popups'); return }
-      const html = `<!DOCTYPE html><html><head><style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{background:#f8f7f5;font-family:serif}
-        .grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:4px;width:900px;height:600px}
-        .big{grid-column:span 2;grid-row:span 2}
-        img{width:100%;height:100%;object-fit:cover;display:block}
-        .caption{background:#111;color:white;padding:16px 20px;font-style:italic;font-size:14px}
-      </style></head><body>
-        <div class="grid">
-          <div class="big"><img src="https://images.unsplash.com/${imgs[0]}?w=800&h=800&fit=crop&crop=center&q=90"/></div>
-          <div><img src="https://images.unsplash.com/${imgs[1]}?w=400&h=400&fit=crop&crop=center&q=90"/></div>
-          <div><img src="https://images.unsplash.com/${imgs[2]}?w=400&h=400&fit=crop&crop=center&q=90"/></div>
-          <div><img src="https://images.unsplash.com/${imgs[3]}?w=400&h=400&fit=crop&crop=center&q=90"/></div>
-          <div><img src="https://images.unsplash.com/${imgs[4]}?w=400&h=400&fit=crop&crop=center&q=90"/></div>
-          <div><img src="https://images.unsplash.com/${imgs[5]}?w=400&h=400&fit=crop&crop=center&q=90"/></div>
-        </div>
-        <div class="caption">"${selectedGoal.affirmation}" — Manifest Vision Board</div>
-        <script>window.onload=function(){window.print()}<\/script>
-      </body></html>`
-      win.document.write(html)
-      win.document.close()
-    } catch (e) {
-      toast.error('Download failed')
-    }
+    if (!isPro) { toast.error('Download is a Pro feature — upgrade to access'); return }
+    const terms = getSearchTerms(selectedGoal, regenCount)
+    const win = window.open('', '_blank')
+    if (!win) { toast.error('Please allow popups'); return }
+    const imgs = terms.map((term, i) => imgUrl(term, imgSeeds[i], 600, 600))
+    win.document.write(`<!DOCTYPE html><html><head><style>
+      *{margin:0;padding:0;box-sizing:border-box}body{background:#f8f7f5;font-family:'Georgia',serif}
+      .grid{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;width:900px;height:600px;gap:4px}
+      .big{grid-row:span 2}.cell{overflow:hidden}img{width:100%;height:100%;object-fit:cover;display:block}
+      .bottom{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:900px}
+      .bottom .cell{height:300px}.caption{background:#111;color:white;padding:20px;font-style:italic;font-size:15px;width:900px}
+    </style></head><body>
+      <div class="grid">
+        <div class="big cell"><img src="${imgs[0]}"/></div>
+        <div class="cell"><img src="${imgs[1]}"/></div>
+        <div class="cell"><img src="${imgs[2]}"/></div>
+      </div>
+      <div class="bottom">
+        <div class="cell"><img src="${imgs[3]}"/></div>
+        <div class="cell"><img src="${imgs[4]}"/></div>
+        <div class="cell"><img src="${imgs[5]}"/></div>
+      </div>
+      <div class="caption">"${selectedGoal.affirmation}" — Manifest Vision Board</div>
+      <script>setTimeout(function(){window.print()},1500)<\/script>
+    </body></html>`)
+    win.document.close()
   }
 
   if (loading) return <div className="text-[#999] text-[14px]">Loading...</div>
@@ -196,7 +249,7 @@ export default function ArtPage() {
     </div>
   )
 
-  const imgs = getCollageImgs(selectedGoal, regenCount)
+  const terms = getSearchTerms(selectedGoal, regenCount)
   const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
 
   return (
@@ -217,7 +270,7 @@ export default function ArtPage() {
           <button onClick={generate} disabled={generating}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors disabled:opacity-50">
             {generating
-              ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full spin-anim"/>Generating...</>
+              ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full spin-anim"/>Refreshing...</>
               : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>New board</>
             }
           </button>
@@ -237,21 +290,56 @@ export default function ArtPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Collage — single grid, no AI image */}
+        {/* Collage */}
         <div ref={collageRef}>
-          <div className="rounded-2xl overflow-hidden mb-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gridTemplateRows: 'repeat(2, 1fr)', gap: '4px' }}>
-            <div style={{ gridColumn: 'span 2', gridRow: 'span 2', aspectRatio: '1/1', overflow: 'hidden' }}>
-              <img src={`https://images.unsplash.com/${imgs[0]}?w=800&h=800&fit=crop&crop=center&q=90`}
-                alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" style={{ display: 'block' }}/>
+          {/* Main 2-col grid — top row */}
+          <div className="rounded-t-2xl overflow-hidden" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gridTemplateRows: '1fr 1fr', gap: '4px', aspectRatio: '3/2' }}>
+            {/* Large left — spans 2 rows */}
+            <div style={{ gridRow: 'span 2', overflow: 'hidden' }}>
+              <img
+                src={imgUrl(terms[0], imgSeeds[0], 600, 600)}
+                alt=""
+                className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
+                style={{ display: 'block' }}
+                onError={(e) => { (e.target as HTMLImageElement).src = `https://source.unsplash.com/featured/600x600/?${encodeURIComponent(selectedGoal.title)}&sig=${imgSeeds[0]+50}` }}
+              />
             </div>
-            {[imgs[1], imgs[2], imgs[3], imgs[4], imgs[5]].map((id, i) => (
-              <div key={i} style={{ aspectRatio: '1/1', overflow: 'hidden' }}>
-                <img src={`https://images.unsplash.com/${id}?w=400&h=400&fit=crop&crop=center&q=90`}
-                  alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" style={{ display: 'block' }}/>
+            {/* Two small right */}
+            <div style={{ overflow: 'hidden' }}>
+              <img
+                src={imgUrl(terms[1], imgSeeds[1], 300, 300)}
+                alt=""
+                className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
+                style={{ display: 'block' }}
+                onError={(e) => { (e.target as HTMLImageElement).src = `https://source.unsplash.com/featured/300x300/?${encodeURIComponent(selectedGoal.title)}&sig=${imgSeeds[1]+50}` }}
+              />
+            </div>
+            <div style={{ overflow: 'hidden' }}>
+              <img
+                src={imgUrl(terms[2], imgSeeds[2], 300, 300)}
+                alt=""
+                className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
+                style={{ display: 'block' }}
+                onError={(e) => { (e.target as HTMLImageElement).src = `https://source.unsplash.com/featured/300x300/?${encodeURIComponent(selectedGoal.title)}&sig=${imgSeeds[2]+50}` }}
+              />
+            </div>
+          </div>
+          {/* Bottom row — 3 equal */}
+          <div className="rounded-b-2xl overflow-hidden mb-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', marginTop: '4px' }}>
+            {[3,4,5].map((idx) => (
+              <div key={idx} style={{ aspectRatio: '1/1', overflow: 'hidden' }}>
+                <img
+                  src={imgUrl(terms[idx], imgSeeds[idx], 300, 300)}
+                  alt=""
+                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
+                  style={{ display: 'block' }}
+                  onError={(e) => { (e.target as HTMLImageElement).src = `https://source.unsplash.com/featured/300x300/?${encodeURIComponent(selectedGoal.title)}&sig=${imgSeeds[idx]+50}` }}
+                />
               </div>
             ))}
           </div>
 
+          {/* Affirmation */}
           <div className="bg-[#111] rounded-2xl p-4">
             <p className="text-[10px] font-medium tracking-[.12em] uppercase text-[#b8922a] mb-2">Daily affirmation</p>
             <p className="font-serif italic text-[15px] text-white leading-[1.6]">"{selectedGoal.affirmation}"</p>
@@ -259,12 +347,12 @@ export default function ArtPage() {
 
           {!isPro && (
             <p className="text-[11px] text-[#999] mt-2 text-center">
-              <Link href="/dashboard/upgrade" className="text-[#b8922a] hover:underline">Upgrade to Pro</Link> to download your vision board
+              <Link href="/dashboard/upgrade" className="text-[#b8922a] hover:underline">Upgrade to Pro</Link> to download your board
             </p>
           )}
         </div>
 
-        {/* Info */}
+        {/* Info panel */}
         <div className="space-y-4">
           <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5">
             <p className="text-[10px] font-medium tracking-[.12em] uppercase text-[#b8922a] mb-2">Vision scene</p>
@@ -289,7 +377,7 @@ export default function ArtPage() {
           )}
 
           {regenCount > 0 && (
-            <p className="text-[11px] text-[#999]">Refreshed {regenCount} time{regenCount !== 1 ? 's' : ''} · new images each time</p>
+            <p className="text-[11px] text-[#999]">Refreshed {regenCount} time{regenCount !== 1 ? 's' : ''} · different images every time</p>
           )}
 
           <Link href="/dashboard/print"

@@ -14,6 +14,9 @@ export default function GoalPage() {
   const [goal, setGoal] = useState<any>(null)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const [showCompleteModal, setShowCompleteModal] = useState(false)
+  const [successNote, setSuccessNote] = useState('')
   const [form, setForm] = useState({ title: '', timeline: '', why: '' })
   const [loading, setLoading] = useState(true)
 
@@ -48,16 +51,53 @@ export default function GoalPage() {
       why: form.why.trim(),
       updated_at: new Date().toISOString(),
     }).eq('id', goal.id)
-    if (error) { toast.error('Save failed: ' + error.message); setSaving(false); return }
-    // Update local state
+    if (error) { toast.error('Save failed'); setSaving(false); return }
     const updated = { ...goal, title: form.title.trim(), timeline: form.timeline, why: form.why.trim() }
     setGoal(updated)
     setGoals(prev => prev.map(g => g.id === goal.id ? updated : g))
     setEditing(false)
     setSaving(false)
     toast.success('Goal updated! Coach will use the new details.')
-    // Clear coach history so it regenerates with new context
     router.refresh()
+  }
+
+  const completeGoal = async () => {
+    if (!goal || completing) return
+    setCompleting(true)
+    // Mark goal inactive
+    const { error } = await supabase.from('goals').update({
+      is_active: false,
+      completed_at: new Date().toISOString(),
+      success_note: successNote.trim() || null,
+    }).eq('id', goal.id)
+    if (error) { toast.error('Could not complete goal'); setCompleting(false); return }
+
+    // Award goal_complete badge
+    await supabase.from('rewards').upsert({
+      user_id: goal.user_id,
+      type: 'goal_complete',
+      title: 'Goal Achieved',
+      description: `Completed: ${goal.title}`,
+      emoji: '🎯',
+      earned_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,type' })
+
+    // Optionally create public success story
+    if (successNote.trim()) {
+      await supabase.from('success_stories').upsert({
+        user_id: goal.user_id,
+        goal_title: goal.title,
+        quote: successNote.trim(),
+        is_public: true,
+      })
+    }
+
+    setShowCompleteModal(false)
+    setCompleting(false)
+    setGoals(prev => prev.filter(g => g.id !== goal.id))
+    localStorage.removeItem('selectedGoalId')
+    toast.success('🎯 Goal completed! You earned a badge.')
+    router.push('/dashboard')
   }
 
   if (loading) return <div className="text-[#999] text-[14px]">Loading...</div>
@@ -74,28 +114,66 @@ export default function GoalPage() {
 
   return (
     <div className="fade-up max-w-[800px]">
+      {/* Complete Goal Modal */}
+      {showCompleteModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl max-w-[440px] w-full p-8 shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="text-[48px] mb-3">🎯</div>
+              <h2 className="font-serif text-[26px] mb-2">Mark as completed?</h2>
+              <p className="text-[14px] text-[#666] leading-[1.6]">This will archive <strong>{goal.title}</strong> and award you a badge. This can't be undone.</p>
+            </div>
+            <div className="mb-5">
+              <label className="block text-[12px] font-medium text-[#666] mb-2">Share your win <span className="text-[#999] font-normal">(optional — shown on community page)</span></label>
+              <textarea
+                value={successNote}
+                onChange={e => setSuccessNote(e.target.value)}
+                placeholder="What did you achieve? How does it feel?"
+                className="w-full px-3.5 py-3 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111] resize-none"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowCompleteModal(false)} className="flex-1 py-3 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">Cancel</button>
+              <button onClick={completeGoal} disabled={completing}
+                className="flex-1 py-3 bg-green-600 text-white rounded-xl text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+                {completing ? 'Completing...' : 'Complete & archive 🎉'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="font-serif text-[32px] mb-1">My Goal</h1>
           <p className="text-[14px] text-[#666]">Your goal profile and roadmap</p>
         </div>
-        {!editing ? (
-          <button onClick={() => setEditing(true)}
-            className="px-4 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
-            Edit goal
-          </button>
-        ) : (
-          <div className="flex gap-2">
-            <button onClick={() => { setEditing(false); setForm({ title: goal.title, timeline: goal.timeline, why: goal.why }) }}
-              className="px-4 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] hover:bg-[#f8f7f5] transition-colors">
-              Cancel
-            </button>
-            <button onClick={saveChanges} disabled={saving}
-              className="px-4 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50 transition-colors">
-              {saving ? 'Saving...' : 'Save changes'}
-            </button>
-          </div>
-        )}
+        <div className="flex gap-2 flex-wrap">
+          {!editing ? (
+            <>
+              <button onClick={() => setEditing(true)}
+                className="px-4 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
+                Edit goal
+              </button>
+              <button onClick={() => setShowCompleteModal(true)}
+                className="px-4 py-2.5 bg-green-600 text-white rounded-xl text-[13px] font-medium hover:bg-green-700 transition-colors">
+                Mark complete ✓
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => { setEditing(false); setForm({ title: goal.title, timeline: goal.timeline, why: goal.why }) }}
+                className="px-4 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] hover:bg-[#f8f7f5] transition-colors">
+                Cancel
+              </button>
+              <button onClick={saveChanges} disabled={saving}
+                className="px-4 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50 transition-colors">
+                {saving ? 'Saving...' : 'Save changes'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Goal tabs */}
@@ -107,6 +185,12 @@ export default function GoalPage() {
               {(g.display_title || g.title).slice(0, 28)}
             </button>
           ))}
+        </div>
+      )}
+
+      {editing && (
+        <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-2xl p-4 mb-4 text-[13px] text-[#b8922a]">
+          Updating your timeline or title will refresh your coach's context on the next message.
         </div>
       )}
 
@@ -150,12 +234,6 @@ export default function GoalPage() {
           )}
         </div>
       </div>
-
-      {editing && (
-        <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-2xl p-4 mb-4 text-[13px] text-[#b8922a]">
-          Updating your timeline or title will refresh your coach's context — they'll respond based on your new details going forward.
-        </div>
-      )}
 
       <div className="bg-white border border-[#e8e8e8] rounded-2xl p-6 mb-4">
         <p className="font-medium mb-4 text-[15px]">Roadmap</p>

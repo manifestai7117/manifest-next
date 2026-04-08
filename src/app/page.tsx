@@ -11,13 +11,18 @@ const STORY_IMGS = [
 async function getPublicData() {
   try {
     const supabase = createClient()
-    const [storiesRes, userCountRes, goalCountRes] = await Promise.all([
+    const [storiesRes, userCountRes, goalCountRes, ratingsRes] = await Promise.all([
       supabase.from('success_stories').select('*, profiles(full_name,avatar_url)').eq('is_public', true).order('created_at', { ascending: false }).limit(3),
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('goals').select('*', { count: 'exact', head: true }),
+      supabase.from('app_ratings').select('rating'),
     ])
-    return { stories: storiesRes.data || [], userCount: userCountRes.count || 0, goalCount: goalCountRes.count || 0 }
-  } catch { return { stories: [], userCount: 0, goalCount: 0 } }
+    const ratings = ratingsRes.data || []
+    const avgRating = ratings.length
+      ? (ratings.reduce((a: number, r: any) => a + r.rating, 0) / ratings.length).toFixed(1)
+      : '4.9'
+    return { stories: storiesRes.data || [], userCount: userCountRes.count || 0, goalCount: goalCountRes.count || 0, avgRating }
+  } catch { return { stories: [], userCount: 0, goalCount: 0, avgRating: '4.9' } }
 }
 
 const FALLBACK_STORIES = [
@@ -30,7 +35,7 @@ export default async function HomePage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { data: userProfile } = user ? await supabase.from('profiles').select('full_name,avatar_url').eq('id', user.id).single() : { data: null }
-  const { stories, userCount, goalCount } = await getPublicData()
+  const { stories, userCount, goalCount, avgRating } = await getPublicData()
   const displayStories = stories.length >= 2 ? stories : FALLBACK_STORIES
   const statUsers = Math.max(userCount, 12400)
   const statGoals = Math.max(goalCount, 12000)
@@ -138,7 +143,7 @@ export default async function HomePage() {
               <h2 className="font-serif text-[clamp(32px,3.5vw,52px)] leading-[1.08] tracking-[-0.02em]">Goals that became real</h2>
             </div>
             <div className="flex gap-8">
-              {[[statUsers.toLocaleString()+'+','Users'],[statGoals.toLocaleString()+'+','Goals created'],['4.9 stars','Avg rating']].map(([v,l])=>(
+              {[[statUsers.toLocaleString()+'+','Users'],[statGoals.toLocaleString()+'+','Goals created'],[avgRating+' stars','Avg rating']].map(([v,l])=>(
                 <div key={l} className="border-l-2 border-[#b8922a] pl-4">
                   <div className="font-serif text-[32px]">{v}</div>
                   <div className="text-[11px] font-medium text-[#666] uppercase tracking-[.08em]">{l}</div>
