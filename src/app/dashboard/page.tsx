@@ -30,7 +30,7 @@ export default async function DashboardPage() {
     : { data: [] }
 
   // Check if user has rated
-  const { data: existingRating } = await supabase.from('app_ratings').select('id').eq('user_id', user.id).single().catch(() => ({ data: null }))
+  const { data: existingRating } = await supabase.from('app_ratings').select('id').eq('user_id', user.id).maybeSingle()
 
   // Compute progress correctly based on timeline + checkins + phases
   let computedProgress = activeGoal?.progress || 0
