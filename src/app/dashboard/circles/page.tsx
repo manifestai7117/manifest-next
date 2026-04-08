@@ -7,7 +7,6 @@ export default function CirclesPage() {
   const supabase = createClient()
   const [circles, setCircles] = useState<any[]>([])
   const [memberCounts, setMemberCounts] = useState<Record<string, number>>({})
-  const [circleMembers, setCircleMembers] = useState<Record<string, any[]>>({})
   const [myCircleIds, setMyCircleIds] = useState<string[]>([])
   const [activeCircle, setActiveCircle] = useState<any>(null)
   const [msgs, setMsgs] = useState<any[]>([])
@@ -27,12 +26,9 @@ export default function CirclesPage() {
       setCircles(c || [])
       const { data: m } = await supabase.from('circle_members').select('circle_id').eq('user_id', user?.id)
       setMyCircleIds(m?.map((x: any) => x.circle_id) || [])
-
-      // Real member counts
       if (c?.length) {
-        const circles = c
         const counts: Record<string, number> = {}
-        await Promise.all(circles.map(async (circle: any) => {
+        await Promise.all(c.map(async (circle: any) => {
           const { count } = await supabase.from('circle_members').select('*', { count: 'exact', head: true }).eq('circle_id', circle.id)
           counts[circle.id] = count || 0
         }))
@@ -40,16 +36,33 @@ export default function CirclesPage() {
       }
     }
     load()
+    // Load cleared timestamps from localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('circle_cleared_at')
+        if (saved) setClearedAt(JSON.parse(saved))
+      } catch {}
+    }
   }, [])
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
 
+  // Realtime subscription
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('circle_cleared_at')
-      if (saved) try { setClearedAt(JSON.parse(saved)) } catch {}
-    }
-  }, [])
+    if (!activeCircle) return
+    const channel = supabase
+      .channel(`circle-${activeCircle.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'circle_messages', filter: `circle_id=eq.${activeCircle.id}` },
+        (payload) => {
+          const newMsg = payload.new as any
+          if (newMsg.is_system) return // never show system messages
+          const cleared = clearedAt[activeCircle.id]
+          if (cleared && new Date(newMsg.created_at) <= new Date(cleared)) return
+          setMsgs(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg])
+        })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [activeCircle, clearedAt])
 
   const clearMyView = (circleId: string) => {
     const now = new Date().toISOString()
@@ -60,35 +73,25 @@ export default function CirclesPage() {
     toast.success('Chat cleared from your view — others still see it')
   }
 
-  // Realtime subscription
-  useEffect(() => {
-    if (!activeCircle) return
-    const channel = supabase
-      .channel(`circle-${activeCircle.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'circle_messages', filter: `circle_id=eq.${activeCircle.id}` },
-        (payload) => {
-          const newMsg = payload.new as any
-          setMsgs(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg])
-        })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [activeCircle])
-
   const openCircle = async (circle: any) => {
     setActiveCircle(circle)
+    setShowMembers(false)
     const res = await fetch(`/api/circles?circleId=${circle.id}`)
     const data = await res.json()
-    setMsgs(data.messages?.length ? data.messages : [{
-      id: 'seed', circle_id: circle.id, sender_name: 'Manifest Coach', is_ai: true,
+    // Filter by user's cleared timestamp
+    const cleared = clearedAt[circle.id]
+    const visible = (data.messages || []).filter((m: any) => {
+      if (m.is_system) return false
+      if (cleared && new Date(m.created_at) <= new Date(cleared)) return false
+      return true
+    })
+    setMsgs(visible.length ? visible : [{
+      id: 'seed', circle_id: circle.id, sender_name: 'Manifest Coach', is_ai: true, is_system: false,
       content: `Welcome to ${circle.name}! You're all working toward the same goal. Share an update and let's keep each other accountable.`,
       created_at: new Date().toISOString()
     }])
-
     // Load members
-    const { data: memberData } = await supabase
-      .from('circle_members')
-      .select('*, profile:profiles(id,full_name,avatar_url,plan)')
-      .eq('circle_id', circle.id)
+    const { data: memberData } = await supabase.from('circle_members').select('*, profile:profiles(id,full_name,avatar_url,plan)').eq('circle_id', circle.id)
     setMembers(memberData || [])
   }
 
@@ -98,16 +101,15 @@ export default function CirclesPage() {
     if (error) { toast.error('Could not join circle'); return }
     setMyCircleIds(prev => [...prev, circleId])
     setMemberCounts(prev => ({ ...prev, [circleId]: (prev[circleId] || 0) + 1 }))
-
-    // Trigger icebreaker via API
     const circle = circles.find(c => c.id === circleId)
     if (circle) {
       const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
       const name = profile?.full_name || 'A new member'
+      // Send icebreaker as system message — API handles it invisibly
       await fetch('/api/circles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ circleId, content: `[SYSTEM: ${name} just joined the circle. Please send a warm icebreaker welcome message to help them introduce themselves and connect with the group.]`, isSystem: true }),
+        body: JSON.stringify({ circleId, content: `[SYSTEM: ${name} just joined the circle. Send a warm icebreaker to welcome them and help them introduce themselves.]`, isSystem: true }),
       })
     }
     toast.success('Joined! Welcome to the circle.')
@@ -127,12 +129,6 @@ export default function CirclesPage() {
     setSending(false)
   }
 
-  const avatarEl = (profile: any, size = 8) => (
-    profile?.avatar_url
-      ? <img src={profile.avatar_url} alt="" className={`w-${size} h-${size} rounded-full object-cover flex-shrink-0`}/>
-      : <div className={`w-${size} h-${size} rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0`}>{profile?.full_name?.[0]?.toUpperCase() || '?'}</div>
-  )
-
   if (activeCircle) {
     const joined = myCircleIds.includes(activeCircle.id)
     const memberCount = memberCounts[activeCircle.id] ?? 0
@@ -146,26 +142,31 @@ export default function CirclesPage() {
             <h1 className="font-serif text-[28px] mb-1">{activeCircle.name}</h1>
             <div className="flex gap-2 items-center flex-wrap text-[12px] text-[#666]">
               <span className="text-[#b8922a] font-medium">{memberCount} member{memberCount !== 1 ? 's' : ''}</span>
-              {activeCircle.creator?.full_name && <span>· Created by {activeCircle.creator.full_name}</span>}
               <span>· {activeCircle.goal_description}</span>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => clearMyView(activeCircle.id)} className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#999] hover:bg-[#f8f7f5] transition-colors">Clear my view</button>
-            className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
-            {showMembers ? 'Hide members' : `Members (${memberCount})`}
-          </button>
+            <button onClick={() => clearMyView(activeCircle.id)}
+              className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#999] hover:bg-[#f8f7f5] transition-colors">
+              Clear my view
+            </button>
+            <button onClick={() => setShowMembers(!showMembers)}
+              className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
+              {showMembers ? 'Hide members' : `Members (${memberCount})`}
+            </button>
           </div>
         </div>
 
-        {/* Members panel */}
         {showMembers && members.length > 0 && (
           <div className="bg-white border border-[#e8e8e8] rounded-2xl p-4 mb-4">
             <p className="text-[11px] font-medium tracking-[.1em] uppercase text-[#999] mb-3">Circle members</p>
             <div className="flex flex-wrap gap-3">
               {members.map((m: any) => (
                 <div key={m.profile?.id} className="flex items-center gap-2">
-                  {avatarEl(m.profile, 8)}
+                  {m.profile?.avatar_url
+                    ? <img src={m.profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0"/>
+                    : <div className="w-8 h-8 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0">{m.profile?.full_name?.[0]?.toUpperCase() || '?'}</div>
+                  }
                   <span className="text-[13px] font-medium">{m.profile?.full_name || 'Member'}</span>
                   {m.profile?.id === activeCircle.created_by && (
                     <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full">Creator</span>
