@@ -1,4 +1,5 @@
 'use client'
+import { useRef } from 'react'
 
 const CARDS = [
   { src:'photo-1571019613454-1cb2f99b2d8b', name:'James T.', goal:'Completed first marathon', badge:'3:52 finish', rot:-3, delay:'0s', top:10, left:10, w:250, h:320, zIdx:3 },
@@ -7,32 +8,47 @@ const CARDS = [
 ]
 
 export default function DraggableCards() {
-  const startDrag = (e: React.MouseEvent<HTMLDivElement>, rot: number, idx: number) => {
+  const zCounter = useRef(10)
+
+  const startDrag = (e: React.MouseEvent<HTMLDivElement>, rot: number) => {
     const el = e.currentTarget
     const parent = el.parentElement!
     const parentRect = parent.getBoundingClientRect()
     const rect = el.getBoundingClientRect()
     const dx = e.clientX - rect.left
     const dy = e.clientY - rect.top
-    el.style.zIndex = '10'
-    el.style.transform = 'rotate(0deg) scale(1.02)'
+
+    // Bring to front
+    zCounter.current += 1
+    el.style.zIndex = String(zCounter.current)
+    el.style.transform = 'rotate(0deg) scale(1.04)'
     el.style.animation = 'none'
     el.style.cursor = 'grabbing'
+    el.style.transition = 'transform 0.15s ease, box-shadow 0.15s ease'
+    el.style.boxShadow = '0 32px 64px rgba(0,0,0,0.25)'
+
     const move = (ev: MouseEvent) => {
       el.style.left = (ev.clientX - dx - parentRect.left) + 'px'
       el.style.top = (ev.clientY - dy - parentRect.top) + 'px'
       el.style.right = 'auto'
       el.style.bottom = 'auto'
+      el.style.transition = 'box-shadow 0.15s ease'
     }
     const up = () => {
-      el.style.zIndex = String(3 - idx)
-      el.style.transform = `rotate(${rot}deg)`
+      el.style.transform = `rotate(${rot}deg) scale(1)`
       el.style.cursor = 'grab'
+      el.style.boxShadow = ''
+      el.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease'
       document.removeEventListener('mousemove', move)
       document.removeEventListener('mouseup', up)
     }
     document.addEventListener('mousemove', move)
     document.addEventListener('mouseup', up)
+  }
+
+  const handleHover = (e: React.MouseEvent<HTMLDivElement>) => {
+    zCounter.current += 1
+    e.currentTarget.style.zIndex = String(zCounter.current)
   }
 
   return (
@@ -49,8 +65,10 @@ export default function DraggableCards() {
             zIndex: p.zIdx,
             cursor: 'grab',
             touchAction: 'none',
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
           } as React.CSSProperties}
-          onMouseDown={e => startDrag(e, p.rot, i)}
+          onMouseDown={e => startDrag(e, p.rot)}
+          onMouseEnter={handleHover}
         >
           <img
             src={`https://images.unsplash.com/${p.src}?w=400&h=500&fit=crop&crop=top`}

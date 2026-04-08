@@ -6,35 +6,38 @@ import toast from 'react-hot-toast'
 export default function CirclesPage() {
   const supabase = createClient()
   const [circles, setCircles] = useState<any[]>([])
-  const [realCounts, setRealCounts] = useState<Record<string, number>>({})
+  const [memberCounts, setMemberCounts] = useState<Record<string, number>>({})
+  const [circleMembers, setCircleMembers] = useState<Record<string, any[]>>({})
   const [myCircleIds, setMyCircleIds] = useState<string[]>([])
   const [activeCircle, setActiveCircle] = useState<any>(null)
   const [msgs, setMsgs] = useState<any[]>([])
+  const [members, setMembers] = useState<any[]>([])
   const [inp, setInp] = useState('')
   const [sending, setSending] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [showMembers, setShowMembers] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-      const { data: c } = await supabase.from('circles').select('*').order('created_at', { ascending: false })
-      setCircles(c || [])
+      const { data: c } = await supabase.from('circles').select('*, creator:profiles!circles_created_by_fkey(id,full_name,avatar_url)').order('created_at', { ascending: false }).catch(() =>
+        supabase.from('circles').select('*').order('created_at', { ascending: false })
+      ) as any
+      setCircles(c?.data || c || [])
       const { data: m } = await supabase.from('circle_members').select('circle_id').eq('user_id', user?.id)
       setMyCircleIds(m?.map((x: any) => x.circle_id) || [])
 
-      // Get real member counts
-      if (c?.length) {
+      // Real member counts
+      if (c?.data?.length || c?.length) {
+        const circles = c?.data || c
         const counts: Record<string, number> = {}
-        await Promise.all(c.map(async (circle: any) => {
-          const { count } = await supabase
-            .from('circle_members')
-            .select('*', { count: 'exact', head: true })
-            .eq('circle_id', circle.id)
+        await Promise.all(circles.map(async (circle: any) => {
+          const { count } = await supabase.from('circle_members').select('*', { count: 'exact', head: true }).eq('circle_id', circle.id)
           counts[circle.id] = count || 0
         }))
-        setRealCounts(counts)
+        setMemberCounts(counts)
       }
     }
     load()
@@ -42,24 +45,16 @@ export default function CirclesPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
 
-  // Realtime subscription for circle messages
+  // Realtime subscription
   useEffect(() => {
     if (!activeCircle) return
     const channel = supabase
       .channel(`circle-${activeCircle.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'circle_messages',
-        filter: `circle_id=eq.${activeCircle.id}`,
-      }, (payload) => {
-        const newMsg = payload.new as any
-        setMsgs(prev => {
-          // Don't add duplicates
-          if (prev.find(m => m.id === newMsg.id)) return prev
-          return [...prev, newMsg]
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'circle_messages', filter: `circle_id=eq.${activeCircle.id}` },
+        (payload) => {
+          const newMsg = payload.new as any
+          setMsgs(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg])
         })
-      })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [activeCircle])
@@ -68,15 +63,18 @@ export default function CirclesPage() {
     setActiveCircle(circle)
     const res = await fetch(`/api/circles?circleId=${circle.id}`)
     const data = await res.json()
-    if (data.messages?.length) {
-      setMsgs(data.messages)
-    } else {
-      setMsgs([{
-        id: 'seed', circle_id: circle.id, sender_name: 'Manifest Coach', is_ai: true,
-        content: `Welcome to ${circle.name}! You're all working toward the same goal. Share an update and let's keep each other accountable.`,
-        created_at: new Date().toISOString()
-      }])
-    }
+    setMsgs(data.messages?.length ? data.messages : [{
+      id: 'seed', circle_id: circle.id, sender_name: 'Manifest Coach', is_ai: true,
+      content: `Welcome to ${circle.name}! You're all working toward the same goal. Share an update and let's keep each other accountable.`,
+      created_at: new Date().toISOString()
+    }])
+
+    // Load members
+    const { data: memberData } = await supabase
+      .from('circle_members')
+      .select('*, profile:profiles(id,full_name,avatar_url,plan)')
+      .eq('circle_id', circle.id)
+    setMembers(memberData || [])
   }
 
   const join = async (circleId: string) => {
@@ -84,8 +82,21 @@ export default function CirclesPage() {
     const { error } = await supabase.from('circle_members').insert({ circle_id: circleId, user_id: user.id })
     if (error) { toast.error('Could not join circle'); return }
     setMyCircleIds(prev => [...prev, circleId])
-    setRealCounts(prev => ({ ...prev, [circleId]: (prev[circleId] || 0) + 1 }))
+    setMemberCounts(prev => ({ ...prev, [circleId]: (prev[circleId] || 0) + 1 }))
+
+    // Trigger icebreaker via API
+    const circle = circles.find(c => c.id === circleId)
+    if (circle) {
+      const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+      const name = profile?.full_name || 'A new member'
+      await fetch('/api/circles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ circleId, content: `[SYSTEM: ${name} just joined the circle. Please send a warm icebreaker welcome message to help them introduce themselves and connect with the group.]`, isSystem: true }),
+      })
+    }
     toast.success('Joined! Welcome to the circle.')
+    await openCircle(circles.find(c => c.id === circleId))
   }
 
   const sendMsg = async () => {
@@ -93,38 +104,61 @@ export default function CirclesPage() {
     const text = inp.trim()
     setInp('')
     setSending(true)
-    const res = await fetch('/api/circles', {
+    await fetch('/api/circles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ circleId: activeCircle.id, content: text }),
     })
-    const data = await res.json()
-    if (res.ok) {
-      setMsgs(prev => {
-        const updated = [...prev]
-        if (data.userMessage && !updated.find(m => m.id === data.userMessage.id)) updated.push(data.userMessage)
-        if (data.aiMessage && !updated.find(m => m.id === data.aiMessage.id)) updated.push(data.aiMessage)
-        return updated
-      })
-    }
     setSending(false)
   }
 
+  const avatarEl = (profile: any, size = 8) => (
+    profile?.avatar_url
+      ? <img src={profile.avatar_url} alt="" className={`w-${size} h-${size} rounded-full object-cover flex-shrink-0`}/>
+      : <div className={`w-${size} h-${size} rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0`}>{profile?.full_name?.[0]?.toUpperCase() || '?'}</div>
+  )
+
   if (activeCircle) {
     const joined = myCircleIds.includes(activeCircle.id)
-    const memberCount = realCounts[activeCircle.id] ?? activeCircle.member_count ?? 0
+    const memberCount = memberCounts[activeCircle.id] ?? 0
     return (
       <div className="fade-up max-w-[760px]">
-        <button onClick={() => setActiveCircle(null)} className="flex items-center gap-1.5 text-[13px] text-[#666] mb-5 hover:text-[#111] transition-colors">
+        <button onClick={() => { setActiveCircle(null); setShowMembers(false) }} className="flex items-center gap-1.5 text-[13px] text-[#666] mb-5 hover:text-[#111]">
           ← Back to circles
         </button>
-        <div className="mb-5">
-          <h1 className="font-serif text-[28px] mb-1">{activeCircle.name}</h1>
-          <div className="flex gap-2 items-center flex-wrap">
-            <span className="text-[11px] font-medium text-[#b8922a] bg-[#faf3e0] px-2.5 py-1 rounded-full">{memberCount} member{memberCount !== 1 ? 's' : ''}</span>
-            <span className="text-[11px] text-[#666]">Goal: {activeCircle.goal_description}</span>
+        <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+          <div>
+            <h1 className="font-serif text-[28px] mb-1">{activeCircle.name}</h1>
+            <div className="flex gap-2 items-center flex-wrap text-[12px] text-[#666]">
+              <span className="text-[#b8922a] font-medium">{memberCount} member{memberCount !== 1 ? 's' : ''}</span>
+              {activeCircle.creator?.full_name && <span>· Created by {activeCircle.creator.full_name}</span>}
+              <span>· {activeCircle.goal_description}</span>
+            </div>
           </div>
+          <button onClick={() => setShowMembers(!showMembers)}
+            className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
+            {showMembers ? 'Hide members' : `Members (${memberCount})`}
+          </button>
         </div>
+
+        {/* Members panel */}
+        {showMembers && members.length > 0 && (
+          <div className="bg-white border border-[#e8e8e8] rounded-2xl p-4 mb-4">
+            <p className="text-[11px] font-medium tracking-[.1em] uppercase text-[#999] mb-3">Circle members</p>
+            <div className="flex flex-wrap gap-3">
+              {members.map((m: any) => (
+                <div key={m.profile?.id} className="flex items-center gap-2">
+                  {avatarEl(m.profile, 8)}
+                  <span className="text-[13px] font-medium">{m.profile?.full_name || 'Member'}</span>
+                  {m.profile?.id === activeCircle.created_by && (
+                    <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full">Creator</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden mb-4">
           <div className="h-[400px] overflow-y-auto p-5 flex flex-col gap-4">
             {msgs.map((m: any) => {
@@ -135,7 +169,7 @@ export default function CirclesPage() {
                   <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[12px] font-semibold ${isAI ? 'bg-[#b8922a] text-white' : 'bg-[#f2f0ec] text-[#666]'}`}>
                     {isAI ? 'M' : m.sender_name?.[0]?.toUpperCase() || '?'}
                   </div>
-                  <div className={`max-w-[78%] ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+                  <div className={`max-w-[78%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                     <p className="text-[11px] text-[#999] mb-1">{isAI ? 'Manifest Coach' : m.sender_name}</p>
                     <div className={`px-4 py-3 text-[13px] leading-[1.6] rounded-2xl ${isMe ? 'bg-[#111] text-white rounded-br-sm' : isAI ? 'bg-[#faf3e0] text-[#111] rounded-bl-sm border border-[#b8922a]/20' : 'bg-[#f8f7f5] text-[#111] rounded-bl-sm'}`}>
                       {m.content}
@@ -147,7 +181,7 @@ export default function CirclesPage() {
             {sending && (
               <div className="flex gap-3">
                 <div className="w-8 h-8 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[12px] font-semibold">M</div>
-                <div className="bg-[#faf3e0] px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1.5 items-center">
+                <div className="bg-[#faf3e0] px-4 py-3 rounded-2xl flex gap-1.5 items-center">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-1"/><span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-2"/><span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-3"/>
                 </div>
               </div>
@@ -163,7 +197,7 @@ export default function CirclesPage() {
             </div>
           ) : (
             <div className="border-t border-[#e8e8e8] p-4 flex items-center justify-between">
-              <p className="text-[13px] text-[#666]">Join this circle to participate</p>
+              <p className="text-[13px] text-[#666]">Join to participate</p>
               <button onClick={() => join(activeCircle.id)} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">Join circle</button>
             </div>
           )}
@@ -175,35 +209,31 @@ export default function CirclesPage() {
   return (
     <div className="fade-up max-w-[900px]">
       <h1 className="font-serif text-[32px] mb-1">Goal Circles</h1>
-      <p className="text-[14px] text-[#666] mb-8">Matched groups working toward the same goal. Real accountability, real people.</p>
+      <p className="text-[14px] text-[#666] mb-8">Groups working toward the same goal. Real accountability.</p>
       {circles.length === 0 ? (
         <div className="bg-white border border-[#e8e8e8] rounded-2xl p-8 text-center">
-          <p className="text-[#666] text-[14px]">No circles yet. Be the first to create one.</p>
+          <p className="text-[#666] text-[14px]">No circles yet.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {circles.map((c) => {
+          {circles.map((c: any) => {
             const joined = myCircleIds.includes(c.id)
-            const memberCount = realCounts[c.id] ?? 0
+            const count = memberCounts[c.id] ?? 0
             return (
               <div key={c.id} className="bg-white border border-[#e8e8e8] rounded-2xl p-5 hover:border-[#d0d0d0] transition-all hover-lift">
                 <div className="flex justify-between items-start mb-3">
                   <span className="text-[10px] font-medium tracking-[.1em] uppercase text-[#999] bg-[#f2f0ec] px-2.5 py-1 rounded-full">{c.category}</span>
-                  {joined && <span className="text-[10px] font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full">Joined</span>}
+                  {joined && <span className="text-[10px] font-medium text-green-600 bg-green-50 px-2.5 py-1 rounded-full">Joined ✓</span>}
                 </div>
                 <h3 className="font-medium text-[15px] mb-1.5">{c.name}</h3>
-                <p className="text-[12px] text-[#666] mb-4 leading-[1.5]">{c.goal_description}</p>
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="text-[12px] text-[#666]">{memberCount} member{memberCount !== 1 ? 's' : ''}</span>
-                </div>
+                <p className="text-[12px] text-[#666] mb-3 leading-[1.5]">{c.goal_description}</p>
+                <p className="text-[11px] text-[#999] mb-4">{count} member{count !== 1 ? 's' : ''}</p>
                 <div className="flex gap-2">
                   <button onClick={() => openCircle(c)} className="flex-1 py-2 text-[12px] font-medium border border-[#e8e8e8] rounded-xl hover:bg-[#f8f7f5] transition-colors">
-                    {joined ? 'Open circle' : 'Preview'}
+                    {joined ? 'Open' : 'Preview'}
                   </button>
                   {!joined && (
-                    <button onClick={() => join(c.id)} className="flex-1 py-2 text-[12px] font-medium bg-[#111] text-white rounded-xl hover:bg-[#2a2a2a] transition-colors">
-                      Join
-                    </button>
+                    <button onClick={() => join(c.id)} className="flex-1 py-2 text-[12px] font-medium bg-[#111] text-white rounded-xl hover:bg-[#2a2a2a] transition-colors">Join</button>
                   )}
                 </div>
               </div>
