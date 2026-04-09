@@ -13,7 +13,6 @@ const AES  = [
   { label:'Bright & energetic', desc:'Color, movement, alive',          bg:'#0d2137', fg:'rgba(255,255,255,.9)' },
 ]
 const GENDERS = ['Man','Woman','Non-binary','Prefer not to say']
-const AGE_RANGES = ['Under 18','18–24','25–34','35–44','45–54','55+']
 const ETHNICITIES = ['South Asian','East Asian','Southeast Asian','Black / African','Latino / Hispanic','Middle Eastern','White / Caucasian','Mixed','Prefer not to say']
 
 export default function OnboardingPage() {
@@ -23,7 +22,7 @@ export default function OnboardingPage() {
   const [user, setUser] = useState<any>(null)
   const [data, setData] = useState({
     goal:'', category:'', timeline:'', why:'', obstacles:'', aesthetic:'',
-    gender:'', ageRange:'', ethnicity:'',
+    gender:'', age:'', ethnicity:'',
   })
   const [result, setResult] = useState<any>(null)
   const [generating, setGenerating] = useState(false)
@@ -94,7 +93,7 @@ export default function OnboardingPage() {
       obstacles: data.obstacles,
       aesthetic: data.aesthetic,
       user_gender: data.gender,
-      user_age_range: data.ageRange,
+      user_age: data.age,
       user_ethnicity: data.ethnicity,
       art_title: result.artTitle,
       art_description: result.artDescription,
@@ -215,12 +214,16 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-[12px] font-medium text-[#666] mb-2">Age range <span className="text-[#999] font-normal">(optional)</span></label>
-                <div className="flex flex-wrap gap-2">
-                  {AGE_RANGES.map(a=>(
-                    <button key={a} onClick={()=>upd('ageRange', data.ageRange===a ? '' : a)} className={`px-4 py-2 rounded-full text-[13px] border transition-all ${data.ageRange===a ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#111] border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>{a}</button>
-                  ))}
-                </div>
+                <label className="block text-[12px] font-medium text-[#666] mb-2">Age <span className="text-[#999] font-normal">(optional)</span></label>
+                <input
+                  type="number"
+                  min="13"
+                  max="100"
+                  value={data.age}
+                  onChange={e => upd('age', e.target.value)}
+                  placeholder="e.g. 24"
+                  className="w-28 px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111] transition-colors"
+                />
               </div>
               <div className="mb-5">
                 <label className="block text-[12px] font-medium text-[#666] mb-2">Ethnicity <span className="text-[#999] font-normal">(optional)</span></label>
