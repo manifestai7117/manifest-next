@@ -14,6 +14,7 @@ const AES  = [
 ]
 const GENDERS = ['Man','Woman','Non-binary','Prefer not to say']
 const AGE_RANGES = ['Under 18','18–24','25–34','35–44','45–54','55+']
+const ETHNICITIES = ['South Asian','East Asian','Southeast Asian','Black / African','Latino / Hispanic','Middle Eastern','White / Caucasian','Mixed','Prefer not to say']
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -22,7 +23,7 @@ export default function OnboardingPage() {
   const [user, setUser] = useState<any>(null)
   const [data, setData] = useState({
     goal:'', category:'', timeline:'', why:'', obstacles:'', aesthetic:'',
-    gender:'', ageRange:'',
+    gender:'', ageRange:'', ethnicity:'',
   })
   const [result, setResult] = useState<any>(null)
   const [generating, setGenerating] = useState(false)
@@ -94,6 +95,7 @@ export default function OnboardingPage() {
       aesthetic: data.aesthetic,
       user_gender: data.gender,
       user_age_range: data.ageRange,
+      user_ethnicity: data.ethnicity,
       art_title: result.artTitle,
       art_description: result.artDescription,
       affirmation: result.affirmation,
@@ -220,7 +222,15 @@ export default function OnboardingPage() {
                   ))}
                 </div>
               </div>
-              <div className="mt-5 p-4 bg-[#f8f7f5] rounded-xl">
+              <div className="mb-5">
+                <label className="block text-[12px] font-medium text-[#666] mb-2">Ethnicity <span className="text-[#999] font-normal">(optional)</span></label>
+                <div className="flex flex-wrap gap-2">
+                  {ETHNICITIES.map(e=>(
+                    <button key={e} onClick={()=>upd('ethnicity', data.ethnicity===e ? '' : e)} className={`px-3.5 py-2 rounded-full text-[12px] border transition-all ${data.ethnicity===e ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#111] border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>{e}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-2 p-4 bg-[#f8f7f5] rounded-xl">
                 <p className="text-[12px] text-[#999]">This is only used to personalise your vision board. It is never shared or used for ads.</p>
               </div>
             </div>
