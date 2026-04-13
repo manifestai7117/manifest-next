@@ -131,7 +131,7 @@ export default function FeedPage() {
       goal_title: goal?.title || null,
     }).select('*, profiles(full_name, avatar_url, plan)').single()
 
-    if (error) { toast.error('Could not post'); setPosting(false); return }
+    if (error) { toast.error(error.message || 'Could not post'); console.error('Feed post error:', error); setPosting(false); return }
     setPosts(prev => [{ ...newPost, likes_count: 0, user_liked: false }, ...prev])
     setContent('')
     setShowCompose(false)
