@@ -83,12 +83,20 @@ export default function FeedPage() {
 
     const { data: feedPosts } = await supabase
       .from('feed_posts')
-      .select('*, profiles(full_name, avatar_url, plan)')
+      .select('*')
       .in('user_id', viewableIds)
       .order('created_at', { ascending: false })
       .limit(30)
 
     if (!feedPosts) { setPosts([]); return }
+
+    // Fetch profiles separately
+    const uniqueUserIds = [...new Set(feedPosts.map((p: any) => p.user_id))]
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url, plan')
+      .in('id', uniqueUserIds)
+    const profileMap = Object.fromEntries((profilesData || []).map((p: any) => [p.id, p]))
 
     // Get likes
     const { data: myLikes } = await supabase
@@ -107,6 +115,7 @@ export default function FeedPage() {
 
     setPosts(feedPosts.map((p: any) => ({
       ...p,
+      profiles: profileMap[p.user_id] || null,
       likes_count: countMap[p.id] || 0,
       user_liked: likedIds.has(p.id),
     })))
@@ -129,10 +138,11 @@ export default function FeedPage() {
       content: content.trim(),
       post_type: postType,
       goal_title: goal?.title || null,
-    }).select('*, profiles(full_name, avatar_url, plan)').single()
+    }).select('*').single()
 
     if (error) { toast.error(error.message || 'Could not post'); console.error('Feed post error:', error); setPosting(false); return }
-    setPosts(prev => [{ ...newPost, likes_count: 0, user_liked: false }, ...prev])
+    const { data: myProfile } = await supabase.from('profiles').select('id, full_name, avatar_url, plan').eq('id', user.id).single()
+    setPosts(prev => [{ ...newPost, profiles: myProfile, likes_count: 0, user_liked: false }, ...prev])
     setContent('')
     setShowCompose(false)
     toast.success('Posted!')
