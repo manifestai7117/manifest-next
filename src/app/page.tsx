@@ -200,7 +200,7 @@ export default async function HomePage() {
                 <p className="text-[13px] text-[#666] mb-4 leading-[1.6]">{p.desc}</p>
                 <div className="h-px bg-[#e8e8e8] mb-4"/>
                 <ul className="space-y-2.5 mb-6">
-                  {p.feats.map(f=><li key={f} className="flex gap-2 text-[13px]"><span className="text-[#b8922a] flex-shrink-0 font-bold">checkmark</span>{f}</li>)}
+                  {p.feats.map(f=><li key={f} className="flex gap-2 text-[13px]"><svg className="flex-shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="8" fill="#22c55e"/><path d="M4.5 8l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>{f}</li>)}
                 </ul>
                 <Link href={user?'/dashboard':'/auth/signup'} className={"block w-full py-3 text-center text-[13px] font-medium rounded-xl transition-all "+(p.featured?'bg-[#111] text-white hover:bg-[#2a2a2a]':'border border-[#d0d0d0] hover:bg-[#f8f7f5]')}>{p.cta}</Link>
               </div>

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
+import MemberProfile from '@/components/dashboard/MemberProfile'
 
 export default function CirclesPage() {
   const supabase = createClient()
@@ -15,6 +16,7 @@ export default function CirclesPage() {
   const [sending, setSending] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [showMembers, setShowMembers] = useState(false)
+  const [viewingMember, setViewingMember] = useState<string | null>(null)
   const [clearedAt, setClearedAt] = useState<Record<string, string>>({})
   const endRef = useRef<HTMLDivElement>(null)
 
@@ -162,7 +164,7 @@ export default function CirclesPage() {
             <p className="text-[11px] font-medium tracking-[.1em] uppercase text-[#999] mb-3">Circle members</p>
             <div className="flex flex-wrap gap-3">
               {members.map((m: any) => (
-                <div key={m.profile?.id} className="flex items-center gap-2">
+                <button key={m.profile?.id} onClick={() => setViewingMember(m.profile?.id)} className="flex items-center gap-2 hover:opacity-80 transition-opacity text-left">
                   {m.profile?.avatar_url
                     ? <img src={m.profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0"/>
                     : <div className="w-8 h-8 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0">{m.profile?.full_name?.[0]?.toUpperCase() || '?'}</div>
@@ -171,7 +173,7 @@ export default function CirclesPage() {
                   {m.profile?.id === activeCircle.created_by && (
                     <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full">Creator</span>
                   )}
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -220,9 +222,12 @@ export default function CirclesPage() {
             </div>
           )}
         </div>
-      </div>
-    )
-  }
+      {viewingMember && user && (
+        <MemberProfile userId={viewingMember} currentUserId={user.id} onClose={() => setViewingMember(null)} />
+      )}
+    </div>
+  )
+}
 
   return (
     <div className="fade-up max-w-[900px]">

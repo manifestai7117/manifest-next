@@ -13,6 +13,8 @@ const NAV = [
   { href:'/dashboard/friends',      label:'Friends & DMs',d:'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z' },
   { href:'/dashboard/art',          label:'Vision Art',   d:'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z' },
   { href:'/dashboard/streak',       label:'Streak',       d:'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+  { href:'/dashboard/feed',          label:'Feed',         d:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10 M22 9H2' },
+  { href:'/dashboard/feedback',      label:'Feedback',     d:'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z M12 8v4 M12 16h.01' },
   { href:'/dashboard/print',        label:'Print Shop',   d:'M6 9V2h12v7 M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2 M6 14h12v8H6z' },
   { href:'/dashboard/profile',      label:'Profile',      d:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
 ]
