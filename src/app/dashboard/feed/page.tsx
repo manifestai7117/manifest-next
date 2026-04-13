@@ -91,7 +91,7 @@ export default function FeedPage() {
     if (!feedPosts) { setPosts([]); return }
 
     // Fetch profiles separately
-    const uniqueUserIds = [...new Set(feedPosts.map((p: any) => p.user_id))]
+    const uniqueUserIds = feedPosts.map((p: any) => p.user_id).filter((id: string, i: number, arr: string[]) => arr.indexOf(id) === i)
     const { data: profilesData } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_url, plan')
