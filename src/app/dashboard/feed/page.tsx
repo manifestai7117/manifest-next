@@ -122,7 +122,7 @@ export default function FeedPage() {
   const submitPost = async () => {
     if (!content.trim() || posting) return
     setPosting(true)
-    const { data: goal } = await supabase.from('goals').select('title').eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: false }).limit(1).single().catch(() => ({ data: null }))
+    const { data: goal } = await supabase.from('goals').select('title').eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: false }).limit(1).maybeSingle()
 
     const { data: newPost, error } = await supabase.from('feed_posts').insert({
       user_id: user.id,
