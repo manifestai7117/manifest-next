@@ -22,7 +22,7 @@ export default function OnboardingPage() {
   const [user, setUser] = useState<any>(null)
   const [data, setData] = useState({
     goal:'', category:'', timeline:'', why:'', obstacles:'', aesthetic:'',
-    gender:'', age:'', ethnicity:'',
+    gender:'', age:'', ethnicity:'', city:'',
   })
   const [result, setResult] = useState<any>(null)
   const [generating, setGenerating] = useState(false)
@@ -95,6 +95,7 @@ export default function OnboardingPage() {
       user_gender: data.gender,
       user_age: data.age,
       user_ethnicity: data.ethnicity,
+      user_city: data.city,
       art_title: result.artTitle,
       art_description: result.artDescription,
       affirmation: result.affirmation,
@@ -205,6 +206,16 @@ export default function OnboardingPage() {
               <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 5 of 5</p>
               <h2 className="font-serif text-[28px] mb-1.5">About you</h2>
               <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">Used to personalise your vision board imagery. Totally optional — skip anytime.</p>
+              <div className="mb-5">
+                <label className="block text-[12px] font-medium text-[#666] mb-2">Your city <span className="text-[#999] font-normal">(optional — makes your vision art location-specific)</span></label>
+                <input
+                  type="text"
+                  value={data.city}
+                  onChange={e => upd('city', e.target.value)}
+                  placeholder="e.g. Austin, New York, London"
+                  className="w-full px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111] transition-colors"
+                />
+              </div>
               <div className="mb-5">
                 <label className="block text-[12px] font-medium text-[#666] mb-2">Gender <span className="text-[#999] font-normal">(optional)</span></label>
                 <div className="flex flex-wrap gap-2">
