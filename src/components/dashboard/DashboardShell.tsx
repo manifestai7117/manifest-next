@@ -34,26 +34,21 @@ export default function DashboardShell({ children, profile }: { children: React.
     router.push('/')
   }
 
-  const SidebarContent = () => (
+  const Sidebar = () => (
     <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-[#e8e8e8] flex items-center justify-between">
+      <div className="p-4 border-b border-[#e8e8e8]">
         <Link href="/" className="font-serif text-[20px] text-[#111]">
           manifest<span className="text-[#b8922a]">.</span>
         </Link>
       </div>
-
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ href, label }) => {
-          const active = pathname === href
-          return (
-            <Link key={href} href={href} onClick={() => setMobileOpen(false)}
-              className={`flex items-center px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${active ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
-              {label}
-            </Link>
-          )
-        })}
+        {NAV.map(({ href, label }) => (
+          <Link key={href} href={href} onClick={() => setMobileOpen(false)}
+            className={`flex items-center px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${pathname === href ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
+            {label}
+          </Link>
+        ))}
       </nav>
-
       <div className="p-3 border-t border-[#e8e8e8]">
         {!isPro && (
           <Link href="/dashboard/upgrade"
@@ -73,13 +68,13 @@ export default function DashboardShell({ children, profile }: { children: React.
             <p className={`text-[13px] font-medium truncate ${pathname === '/dashboard/profile' ? 'text-white' : 'text-[#111]'}`}>
               {profile?.full_name || 'User'}
             </p>
-            <p className={`text-[11px] capitalize ${pathname === '/dashboard/profile' ? 'text-white/50' : 'text-[#999]'}`}>
-              {profile?.plan === 'pro_trial' ? 'Pro trial' : profile?.plan || 'free'}
+            <p className={`text-[11px] ${pathname === '/dashboard/profile' ? 'text-white/50' : 'text-[#999]'}`}>
+              {isPro ? 'Pro' : 'Free'}
             </p>
           </div>
         </Link>
         <button onClick={signOut}
-          className="flex items-center gap-2 px-3 py-2 w-full text-left text-[13px] text-[#999] hover:text-[#666] transition-colors rounded-xl hover:bg-[#f8f7f5]">
+          className="px-3 py-2 w-full text-left text-[13px] text-[#999] hover:text-[#666] transition-colors rounded-xl hover:bg-[#f8f7f5]">
           Sign out
         </button>
       </div>
@@ -88,22 +83,19 @@ export default function DashboardShell({ children, profile }: { children: React.
 
   return (
     <div className="min-h-screen bg-[#f8f7f5] flex">
-      {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-[220px] bg-white border-r border-[#e8e8e8] fixed h-full z-30">
-        <SidebarContent />
+        <Sidebar />
       </aside>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)}/>
           <aside className="absolute right-0 top-0 bottom-0 w-[260px] bg-white shadow-2xl overflow-y-auto">
-            <SidebarContent />
+            <Sidebar />
           </aside>
         </div>
       )}
 
-      {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-[#e8e8e8] flex items-center justify-between px-4 z-30">
         <Link href="/" className="font-serif text-[20px] text-[#111]">
           manifest<span className="text-[#b8922a]">.</span>
@@ -119,7 +111,6 @@ export default function DashboardShell({ children, profile }: { children: React.
         </div>
       </div>
 
-      {/* Main content */}
       <main className="flex-1 md:ml-[220px] min-h-screen">
         <div className="hidden md:flex items-center justify-end px-6 py-3 border-b border-[#e8e8e8] bg-white sticky top-0 z-20">
           <NotificationBell />
