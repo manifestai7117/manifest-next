@@ -10,8 +10,10 @@ export default async function DashboardPage() {
   return (
     <div className="fade-up">
       <h1 className="font-serif text-[32px] mb-4">Dashboard</h1>
-      <p className="text-[#666] mb-4">User: {user.email}</p>
-      <Link href="/onboarding" className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px]">Create goal</Link>
+      <p className="text-[#666] mb-4">Welcome back, {user.email}</p>
+      <Link href="/onboarding" className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px]">
+        Create goal →
+      </Link>
     </div>
   )
 }
