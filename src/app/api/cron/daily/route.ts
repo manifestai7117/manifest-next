@@ -22,12 +22,13 @@ export async function GET(request: Request) {
   if (goalsAtRisk?.length) {
     const userIds = goalsAtRisk.map(g => g.user_id).filter((id: string, i: number, a: string[]) => a.indexOf(id) === i)
     const { data: prefs } = await supabase.from('user_preferences').select('user_id').in('user_id', userIds).eq('email_streak_reminders', true)
-    const prefSet = new Set((prefs || []).map((p: any) => p.user_id))
-    const { data: profiles } = await supabase.from('profiles').select('id, email, full_name').in('id', [...prefSet])
+    const prefUserIds = (prefs || []).map((p: any) => p.user_id)
+    const prefSet = prefUserIds
+    const { data: profiles } = await supabase.from('profiles').select('id, email, full_name').in('id', prefUserIds)
     const profileMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, p]))
 
     for (const goal of goalsAtRisk) {
-      if (!prefSet.has(goal.user_id)) continue
+      if (!prefUserIds.includes(goal.user_id)) continue
       const profile = profileMap[goal.user_id]
       if (!profile?.email) continue
       const firstName = profile.full_name?.split(' ')[0] || 'there'
