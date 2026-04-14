@@ -33,7 +33,7 @@ export default function DiscoverCirclesPage() {
     load()
   }, [])
 
-  const categories = ['all', ...new Set((circles || []).map((c: any) => c.category).filter(Boolean))]
+  const categories = ['all', ...(circles || []).map((c: any) => c.category).filter(Boolean).filter((c: string, i: number, a: string[]) => a.indexOf(c) === i)]
   const filtered = filter === 'all' ? circles : circles.filter(c => c.category === filter)
 
   return (
