@@ -3,12 +3,14 @@ import { Toaster } from 'react-hot-toast'
 import './globals.css'
 import Script from 'next/script'
 
+export const viewport = {
+  themeColor: '#111111',
+}
+
 export const metadata: Metadata = {
   title: 'Manifest — Turn Your Goals Into Reality',
   description: 'AI-powered vision boards, daily coaching, and real accountability. Not just a vision board — a transformation engine.',
   manifest: '/manifest.json',
-  themeColor: '#111111',
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Manifest' },
   openGraph: {
     title: 'Manifest',
     description: 'Turn your goals into lived reality',
