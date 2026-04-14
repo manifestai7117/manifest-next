@@ -1,6 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { createAdminClient } from '@/lib/supabase/server'
 
 const ADMIN_EMAIL = 'hpari002@ucr.edu' // Change to your email
 
