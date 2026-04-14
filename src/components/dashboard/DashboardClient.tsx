@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
@@ -23,13 +23,14 @@ export default function DashboardClient({
   existingRating, userId, greeting, firstName, dayOfYear
 }: Props) {
   const supabase = createClient()
-  const [selectedGoalId, setSelectedGoalId] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('selectedGoalId')
-      if (saved && goals.find(g => g.id === saved)) return saved
+  const [selectedGoalId, setSelectedGoalId] = useState(goals[0]?.id || '')
+
+  useEffect(() => {
+    const saved = localStorage.getItem('selectedGoalId')
+    if (saved && goals.find((g: any) => g.id === saved)) {
+      setSelectedGoalId(saved)
     }
-    return goals[0]?.id || ''
-  })
+  }, [])
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
   const [ratingDismissed, setRatingDismissed] = useState(existingRating)
