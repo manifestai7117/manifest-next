@@ -127,7 +127,8 @@ export default function StreakPage() {
             return (
               <button key={dateStr} onClick={() => checkin && setSelectedDay(selectedDay?.dateStr === dateStr ? null : { ...checkin, dateStr, day })}
                 disabled={!checkin}
-                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-[11px] font-medium transition-all
+                title={checkin ? `${MOOD_LABEL[checkin.mood] || 'Checked in'}${checkin.note ? ': ' + checkin.note : ''}` : ''}
+              className={`aspect-square rounded-lg flex flex-col items-center justify-center text-[11px] font-medium transition-all
                   ${bgColor}
                   ${isToday ? 'ring-2 ring-[#b8922a] ring-offset-1' : ''}
                   ${checkin ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}

@@ -70,7 +70,12 @@ export default function DashboardClient({
 
   return (
     <div className="fade-up max-w-[900px]">
-      <h1 className="font-serif text-[32px] mb-1">{greeting}, {firstName}.</h1>
+      <div className="flex items-start justify-between mb-1 flex-wrap gap-2">
+        <h1 className="font-serif text-[32px]">{greeting}, {firstName}.</h1>
+        <Link href="/onboarding" className="px-4 py-2 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium text-[#666] hover:bg-[#f8f7f5] transition-colors flex-shrink-0">
+          + Add goal
+        </Link>
+      </div>
       <p className="text-[#666] mb-5 text-[14px]">
         {checkedInToday
           ? `Checked in today ✓ · ${goal.streak} day streak 🔥`

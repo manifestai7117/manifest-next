@@ -24,7 +24,11 @@ export default function CirclesPage() {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-      const { data: c } = await supabase.from('circles').select('*').order('created_at', { ascending: false })
+      const { data: memberOf } = await supabase.from('circle_members').select('circle_id').eq('user_id', user?.id)
+      const myIds = (memberOf || []).map((x: any) => x.circle_id)
+      const { data: c } = myIds.length 
+        ? await supabase.from('circles').select('*').in('id', myIds).order('created_at', { ascending: false })
+        : { data: [] }
       setCircles(c || [])
       const { data: m } = await supabase.from('circle_members').select('circle_id').eq('user_id', user?.id)
       setMyCircleIds(m?.map((x: any) => x.circle_id) || [])

@@ -105,7 +105,7 @@ export default function SettingsPage() {
       {/* Appearance */}
       <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
         <p className="font-medium text-[14px] mb-3">Appearance</p>
-        <Toggle value={prefs.dark_mode} onChange={v => { save({ dark_mode: v }); document.documentElement.classList.toggle('dark', v) }} label="Dark mode" desc="Easy on the eyes"/>
+        <Toggle value={prefs.dark_mode} onChange={v => { save({ dark_mode: v }); document.documentElement.classList.toggle('dark', v); localStorage.setItem('manifest_dark_mode', String(v)) }} label="Dark mode" desc="Easy on the eyes"/>
       </div>
 
       {/* Offboarding */}

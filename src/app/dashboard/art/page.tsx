@@ -210,7 +210,7 @@ export default function ArtPage() {
           {chosenIdx === null && (
             <p className="text-[14px] text-[#666] mb-4 font-medium">Choose the vision that resonates most with you:</p>
           )}
-          <div className={`grid gap-4 mb-6 ${options.length === 3 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
+          <div className={`grid gap-4 mb-6 ${options.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
             {options.map((opt, i) => (
               <div key={i}
                 onClick={() => chooseOption(i)}
@@ -222,7 +222,7 @@ export default function ArtPage() {
                       : 'hover:shadow-xl hover:scale-[1.01]'
                 }`}>
                 {/* Image */}
-                <div className="relative" style={{ aspectRatio: '9/16' }}>
+                <div className="relative" style={{ aspectRatio: '3/4' }}>
                   {opt.imageUrl ? (
                     <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover"/>
                   ) : (
@@ -254,7 +254,7 @@ export default function ArtPage() {
 
           {/* Chosen image detail view */}
           {chosenImage && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-2xl overflow-hidden shadow-2xl" style={{ aspectRatio: '4/5' }}>
                 <img src={chosenImage.imageUrl} alt={chosenImage.label} className="w-full h-full object-cover"/>
               </div>

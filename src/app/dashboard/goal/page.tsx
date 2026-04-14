@@ -7,6 +7,87 @@ import { useRouter } from 'next/navigation'
 
 const TIMELINES = ['1 week','2 weeks','1 month','6 weeks','2 months','3 months','6 months','1 year','2 years']
 
+
+const TIMELINE_DAYS: Record<string, number> = {
+  '1 week': 7, '2 weeks': 14, '1 month': 30, '6 weeks': 42,
+  '2 months': 60, '3 months': 90, '6 months': 180, '1 year': 365, '2 years': 730,
+}
+
+function RoadmapSection({ goal }: { goal: any }) {
+  const totalDays = TIMELINE_DAYS[goal.timeline] || 90
+  const startDate = new Date(goal.created_at)
+
+  const phases = [
+    {
+      label: 'Phase 1',
+      milestone: goal.milestone_1 || goal.milestone_30 || `Complete first ${Math.round(totalDays * 0.33)} days consistently`,
+      done: goal.phase1_completed,
+      dueDate: new Date(startDate.getTime() + Math.round(totalDays * 0.33) * 86400000),
+      dayTarget: Math.round(totalDays * 0.33),
+    },
+    {
+      label: 'Phase 2',
+      milestone: goal.milestone_2 || goal.milestone_60 || `Reach ${Math.round(totalDays * 0.66)} days of progress`,
+      done: goal.phase2_completed,
+      dueDate: new Date(startDate.getTime() + Math.round(totalDays * 0.66) * 86400000),
+      dayTarget: Math.round(totalDays * 0.66),
+    },
+    {
+      label: 'Phase 3 — Final',
+      milestone: goal.milestone_3 || goal.milestone_90 || `Complete the full ${goal.timeline} journey`,
+      done: goal.phase3_completed,
+      dueDate: new Date(startDate.getTime() + totalDays * 86400000),
+      dayTarget: totalDays,
+    },
+  ]
+
+  const today = new Date()
+  const daysPassed = Math.floor((today.getTime() - startDate.getTime()) / 86400000)
+
+  return (
+    <div className="bg-white border border-[#e8e8e8] rounded-2xl p-6 mb-4">
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-medium text-[15px]">Roadmap</p>
+        <span className="text-[11px] text-[#999]">Day {daysPassed} of {totalDays}</span>
+      </div>
+      <div className="relative">
+        {/* Progress line */}
+        <div className="absolute left-[15px] top-4 bottom-4 w-0.5 bg-[#f0ede8]"/>
+        <div className="absolute left-[15px] top-4 w-0.5 bg-[#b8922a] transition-all duration-700"
+          style={{ height: `${Math.min(100, (daysPassed / totalDays) * 100)}%` }}/>
+        <div className="space-y-0">
+          {phases.map((p, i) => {
+            const isPast = today > p.dueDate
+            const isCurrent = !p.done && daysPassed < p.dayTarget && (i === 0 || daysPassed >= phases[i-1]?.dayTarget)
+            return (
+              <div key={p.label} className={`flex gap-4 pl-2 py-4 ${i < phases.length - 1 ? 'border-b border-[#f0ede8]' : ''}`}>
+                <div className={`w-[18px] h-[18px] rounded-full flex-shrink-0 mt-0.5 flex items-center justify-center z-10 ${p.done ? 'bg-green-500' : isCurrent ? 'bg-[#b8922a]' : 'bg-[#e8e8e8]'}`}>
+                  {p.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                  {isCurrent && <span className="w-2 h-2 rounded-full bg-white"/>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div>
+                      <p className="text-[11px] font-semibold text-[#b8922a] uppercase tracking-[.08em] mb-0.5">{p.label}</p>
+                      <p className="text-[14px] text-[#111] leading-[1.55]">{p.milestone}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-[11px] text-[#999]">{p.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                      <p className={`text-[10px] font-medium mt-0.5 px-2 py-0.5 rounded-full ${p.done ? 'bg-green-50 text-green-700' : isCurrent ? 'bg-[#faf3e0] text-[#b8922a]' : isPast ? 'bg-red-50 text-red-600' : 'bg-[#f2f0ec] text-[#999]'}`}>
+                        {p.done ? 'Done ✓' : isCurrent ? 'In progress' : isPast ? 'Overdue' : `Day ${p.dayTarget}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function GoalPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -150,6 +231,10 @@ export default function GoalPage() {
           <p className="text-[14px] text-[#666]">Your goal profile and roadmap</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Link href="/onboarding"
+            className="px-4 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
+            + Add goal
+          </Link>
           {!editing ? (
             <>
               <button onClick={() => setEditing(true)}
@@ -235,22 +320,7 @@ export default function GoalPage() {
         </div>
       </div>
 
-      <div className="bg-white border border-[#e8e8e8] rounded-2xl p-6 mb-4">
-        <p className="font-medium mb-4 text-[15px]">Roadmap</p>
-        {[
-          [goal.milestone_1 || goal.milestone_30, 'Phase 1', goal.phase1_completed],
-          [goal.milestone_2 || goal.milestone_60, 'Phase 2', goal.phase2_completed],
-          [goal.milestone_3 || goal.milestone_90, 'Phase 3', goal.phase3_completed],
-        ].filter(([v]) => v).map(([v, label, done], i, arr) => (
-          <div key={String(label)} className={`flex gap-4 py-3.5 ${i < arr.length - 1 ? 'border-b border-[#e8e8e8]' : ''} items-start`}>
-            <span className="text-[12px] font-medium text-[#b8922a] w-16 flex-shrink-0 pt-0.5">{String(label)}</span>
-            <span className="text-[14px] flex-1 leading-[1.6]">{String(v)}</span>
-            <span className={`text-[10px] font-medium px-2.5 py-1 rounded-full flex-shrink-0 ${done ? 'bg-green-50 text-green-700' : 'bg-[#f2f0ec] text-[#999]'}`}>
-              {done ? 'Completed ✓' : 'In progress'}
-            </span>
-          </div>
-        ))}
-      </div>
+      <RoadmapSection goal={goal} />
 
       <div className="bg-[#111] rounded-2xl p-6">
         <p className="text-[10px] font-medium tracking-[.12em] uppercase text-white/30 mb-3">Your affirmation</p>
