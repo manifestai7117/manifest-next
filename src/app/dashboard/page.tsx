@@ -31,15 +31,18 @@ export default async function DashboardPage() {
     '2 months': 60, '3 months': 90, '6 months': 180, '1 year': 365, '2 years': 730,
   }
 
-  // Always recompute progress from actual streak + time elapsed
+  // Recompute progress — phase completions are the floor (33/66/100%)
   const goalsWithProgress = goals.map((goal: any) => {
     const totalDays = timelineMap[goal.timeline] || 90
     const startDate = new Date(goal.created_at)
     const rawDays = Math.floor((Date.now() - startDate.getTime()) / 86400000)
     const daysPassed = Math.max(0, rawDays, goal.streak || 0)
-    const streakBonus = Math.min(30, Math.round(((goal.streak || 0) / Math.max(totalDays, 1)) * 30))
+    const streakBonus = Math.min(20, Math.round(((goal.streak || 0) / Math.max(totalDays, 1)) * 20))
     const timeProgress = Math.min(70, Math.round((daysPassed / totalDays) * 70))
-    const computedProgress = Math.min(100, timeProgress + streakBonus)
+    const timeBased = Math.min(100, timeProgress + streakBonus)
+    // Phase completions override time-based calculation
+    const phaseFloor = goal.phase3_completed ? 100 : goal.phase2_completed ? 66 : goal.phase1_completed ? 33 : 0
+    const computedProgress = Math.max(phaseFloor, timeBased)
     return { ...goal, progress: computedProgress, daysPassed, totalDays }
   })
 
