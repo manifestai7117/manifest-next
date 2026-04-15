@@ -10,45 +10,104 @@ const TIMELINES = ['1 week','2 weeks','1 month','6 weeks','2 months','3 months',
 
 // Generate smart milestone text from goal context when DB fields are empty
 function autoMilestone(goal: any, phase: number): string {
-  const title = goal.title || 'your goal'
-  const cat = (goal.category || '').toLowerCase()
+  const title = (goal.title || 'your goal').trim()
+  const titleLower = title.toLowerCase()
   const timeline = goal.timeline || '3 months'
-  const TIMELINE_DAYS: Record<string, number> = {
+  const TDAYS: Record<string, number> = {
     '1 week': 7, '2 weeks': 14, '1 month': 30, '6 weeks': 42,
     '2 months': 60, '3 months': 90, '6 months': 180, '1 year': 365, '2 years': 730,
   }
-  const totalDays = TIMELINE_DAYS[timeline] || 90
-  const d1 = Math.round(totalDays * 0.33), d2 = Math.round(totalDays * 0.66)
+  const totalDays = TDAYS[timeline] || 90
+  const d1 = Math.round(totalDays * 0.33)
+  const d2 = Math.round(totalDays * 0.66)
 
-  if (cat.includes('fitness') || cat.includes('health') || cat.includes('run')) {
+  // Sport / skill-based goals — derive specific targets from the actual goal title
+  const sportMatch = titleLower.match(/(pickleball|tennis|golf|basketball|soccer|football|volleyball|chess|poker|swimming|cycling|boxing|yoga|martial arts|guitar|piano|coding|programming|drawing|painting)/)
+  if (sportMatch) {
+    const sport = sportMatch[1]
+    const targets: Record<string, string[]> = {
+      pickleball: [
+        `Play at least 3 sessions per week, master the dink shot and serve consistency, and win your first competitive point by day ${d1}`,
+        `Reduce unforced errors by 50%, hold your own in doubles rallies, and complete ${d2} days of deliberate practice`,
+        `Achieve your defined level of play — keep up with your friends in a real match and win sets consistently`,
+      ],
+      tennis: [
+        `Hit ${d1} consecutive days of practice, master the forehand groundstroke, and sustain 10-shot rallies`,
+        `Learn backhand and serve, play 5 competitive sets against opponents, reach ${d2} days consistent`,
+        `Win a set against someone at your target skill level — complete "${title}"`,
+      ],
+      golf: [
+        `Play 9 holes 3x per week, break 60 for 9 holes, and eliminate 3-putts by day ${d1}`,
+        `Break 50 for 9 holes consistently, improve driving accuracy, reach ${d2} rounds played`,
+        `Achieve your target handicap and complete "${title}" with a round you're proud of`,
+      ],
+      guitar: [
+        `Learn 5 chords and 2 songs, practice 30 min daily, build calluses — complete by day ${d1}`,
+        `Learn 10 songs, practice barre chords, play through a full set without stopping by day ${d2}`,
+        `Perform "${title}" — play in front of someone or record yourself playing confidently`,
+      ],
+      coding: [
+        `Complete foundational modules, build 2 small projects, commit code daily through day ${d1}`,
+        `Build a real project, get code reviewed, solve 20 algorithm problems by day ${d2}`,
+        `Ship something real to production or portfolio — achieve "${title}"`,
+      ],
+    }
+    const sportTargets = targets[sport]
+    if (sportTargets) return sportTargets[phase - 1] || sportTargets[0]
+    // Generic sport fallback
+    const generic = [
+      `Practice ${sport} at least 3x per week, focus on fundamentals, and achieve a measurable skill improvement by day ${d1}`,
+      `Compete or spar regularly, identify and fix your 2 biggest weaknesses in ${sport} by day ${d2}`,
+      `Achieve "${title}" — demonstrate the skill level you set out for in a real situation`,
+    ]
+    return generic[phase - 1] || generic[0]
+  }
+
+  // Running / marathon
+  if (titleLower.includes('run') || titleLower.includes('marathon') || titleLower.includes('5k') || titleLower.includes('10k')) {
     const targets = [
-      `Build your base — establish a consistent ${Math.ceil(totalDays/30) * 3}x/week training habit and complete your first ${Math.round(d1)}-day streak`,
-      `Build intensity — increase duration/weight by 20%, hit a personal best, and maintain 4x/week consistency through day ${d2}`,
-      `Peak performance — complete "${title}" at full capacity and set a new personal record`,
+      `Run 3x per week without missing, complete a ${d1}-day streak, and build to 30 min non-stop`,
+      `Increase weekly mileage by 10%, run your longest distance yet, maintain consistency through day ${d2}`,
+      `Complete "${title}" — cross the finish line or hit your target pace/distance`,
     ]
     return targets[phase - 1] || targets[0]
   }
-  if (cat.includes('career') || cat.includes('business') || cat.includes('skill')) {
+
+  // Weight / body composition
+  if (titleLower.includes('weight') || titleLower.includes('lbs') || titleLower.includes('kg') || titleLower.includes('fat') || titleLower.includes('muscle')) {
     const targets = [
-      `Foundation phase — complete the core learning modules, apply the skill in at least 3 real situations by day ${d1}`,
-      `Applied phase — lead a project using this skill, get feedback from peers, and build a portfolio piece by day ${d2}`,
-      `Mastery phase — demonstrate expert-level results and achieve "${title}" with measurable outcomes`,
+      `Track every meal for ${d1} days, hit your calorie/macro targets 80% of days, start your workout routine`,
+      `Lose/gain the first visible increment toward your goal, never miss a workout week through day ${d2}`,
+      `Achieve "${title}" — hit your target weight/body composition and maintain it for 2 weeks`,
     ]
     return targets[phase - 1] || targets[0]
   }
-  if (cat.includes('financial') || cat.includes('money')) {
+
+  // Reading
+  if (titleLower.includes('read') || titleLower.includes('book')) {
     const targets = [
-      `Set up systems — automate savings, cut 1 major expense, hit your first monthly savings target by day ${d1}`,
-      `Build momentum — reach 50% of your financial target, track every expense, stay on budget for ${d2} days straight`,
-      `Hit the goal — achieve "${title}" and build an additional 10% buffer`,
+      `Read every day for ${d1} days, finish your first book, build the daily habit`,
+      `Complete ${Math.round(totalDays / 30)} books, take notes on every chapter, reach day ${d2}`,
+      `Complete "${title}" — finish all books on your list and write a reflection`,
     ]
     return targets[phase - 1] || targets[0]
   }
-  // Generic smart fallbacks based on timeline fraction
+
+  // Financial
+  if (titleLower.includes('save') || titleLower.includes('money') || titleLower.includes('debt') || titleLower.includes('invest')) {
+    const targets = [
+      `Automate your savings, cut 2 unnecessary expenses, hit your first monthly target by day ${d1}`,
+      `Reach 50% of your financial goal, stay on budget every week through day ${d2}`,
+      `Achieve "${title}" — hit your financial number and celebrate responsibly`,
+    ]
+    return targets[phase - 1] || targets[0]
+  }
+
+  // Generic — always uses the actual goal title
   const targets = [
-    `Establish daily habits for "${title}" — check in every day, track progress, and hit your first ${d1}-day consistency milestone`,
-    `Double down — increase effort, push through resistance, and reach the halfway point of "${title}" by day ${d2}`,
-    `Complete "${title}" — achieve the specific outcome you set out for and document your results`,
+    `Commit to daily action toward "${title}" — check in every day, establish your core habit, and hit a ${d1}-day streak`,
+    `Push past the plateau — increase intensity or frequency, solve the hardest obstacle you face, maintain momentum to day ${d2}`,
+    `Complete "${title}" — achieve the exact outcome you set out for and document what you learned`,
   ]
   return targets[phase - 1] || targets[0]
 }
@@ -67,7 +126,10 @@ function RoadmapSection({ goal, onGoalUpdate }: { goal: any; onGoalUpdate: (upda
   const today = new Date()
   const rawDays = Math.floor((today.getTime() - startDate.getTime()) / 86400000)
   const daysPassed = Math.max(0, rawDays, goal.streak || 0)
-  const pct = Math.min(100, Math.round((daysPassed / totalDays) * 100))
+  // Progress: use phase completions as floor (33/66/100%), else use time+streak
+  const phaseFloor = goal.phase3_completed ? 100 : goal.phase2_completed ? 66 : goal.phase1_completed ? 33 : 0
+  const timePct = Math.round((daysPassed / totalDays) * 100)
+  const pct = Math.min(100, Math.max(phaseFloor, timePct, goal.progress || 0))
 
   // Use AI-generated milestones from DB, not generic fallbacks
   const phases = [
@@ -168,7 +230,8 @@ function RoadmapSection({ goal, onGoalUpdate }: { goal: any; onGoalUpdate: (upda
             : isCurrent ? 'bg-[#faf3e0] text-[#b8922a]'
             : isPast ? 'bg-red-50 text-red-500'
             : 'bg-[#f2f0ec] text-[#999]'
-          const badgeText = p.done ? `Done ✓ ${p.completedAt ? '(early!)' : ''}`
+          const completedEarly = p.done && p.completedAt && new Date(p.completedAt) < p.plannedDate
+          const badgeText = p.done ? `Done ✓${completedEarly ? ' (ahead of schedule!)' : ''}`
             : isCurrent ? 'In progress'
             : isPast ? 'Overdue'
             : `Starts day ${i === 0 ? 1 : phases[i-1].dayTarget + 1}`
@@ -188,8 +251,8 @@ function RoadmapSection({ goal, onGoalUpdate }: { goal: any; onGoalUpdate: (upda
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                   <span className="text-[11px] text-[#999]">
                     {p.done && p.completedAt
-                      ? `Completed ${displayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                      : displayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      ? `Done ${new Date(p.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                      : `By ${p.plannedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
                   </span>
                   <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeStyle}`}>{badgeText}</span>
                 </div>
