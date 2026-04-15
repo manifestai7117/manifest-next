@@ -13,42 +13,80 @@ const TIMELINE_DAYS: Record<string, number> = {
   '2 months': 60, '3 months': 90, '6 months': 180, '1 year': 365, '2 years': 730,
 }
 
-function RoadmapSection({ goal }: { goal: any }) {
+function RoadmapSection({ goal, onGoalUpdate }: { goal: any; onGoalUpdate: (updated: any) => void }) {
+  const supabase = createClient()
+  const [completing, setCompleting] = useState<number | null>(null)
+  
   const totalDays = TIMELINE_DAYS[goal.timeline] || 90
   const startDate = new Date(goal.created_at)
   const today = new Date()
-  // Use the greater of: actual days since creation OR current streak
-  // This handles timezone edge cases where same-day creation shows 0
   const rawDays = Math.floor((today.getTime() - startDate.getTime()) / 86400000)
   const daysPassed = Math.max(0, rawDays, goal.streak || 0)
   const pct = Math.min(100, Math.round((daysPassed / totalDays) * 100))
 
+  // Use AI-generated milestones from DB, not generic fallbacks
   const phases = [
     {
+      num: 1,
       label: 'Phase 1',
-      milestone: goal.milestone_1 || goal.milestone_30 || `Build the foundation for ${goal.title} — establish daily habits and hit your first measurable target`,
+      milestone: goal.milestone_30 || goal.milestone_1,
       actions: (goal.phase1Actions || goal.phase1_actions || '').split('|').filter((a: string) => a.trim()),
-      done: goal.phase1_completed,
-      dueDate: new Date(startDate.getTime() + Math.round(totalDays * 0.33) * 86400000),
+      done: !!goal.phase1_completed,
+      completedAt: goal.phase1_completed_at,
+      // Due date: if completed early, show actual date; else show planned date
+      plannedDate: new Date(startDate.getTime() + Math.round(totalDays * 0.33) * 86400000),
       dayTarget: Math.round(totalDays * 0.33),
+      completedField: 'phase1_completed',
+      completedAtField: 'phase1_completed_at',
     },
     {
+      num: 2,
       label: 'Phase 2',
-      milestone: goal.milestone_2 || goal.milestone_60 || `Build momentum — increase intensity and hit your mid-point milestone for ${goal.title}`,
+      milestone: goal.milestone_60 || goal.milestone_2,
       actions: (goal.phase2Actions || goal.phase2_actions || '').split('|').filter((a: string) => a.trim()),
-      done: goal.phase2_completed,
-      dueDate: new Date(startDate.getTime() + Math.round(totalDays * 0.66) * 86400000),
+      done: !!goal.phase2_completed,
+      completedAt: goal.phase2_completed_at,
+      plannedDate: new Date(startDate.getTime() + Math.round(totalDays * 0.66) * 86400000),
       dayTarget: Math.round(totalDays * 0.66),
+      completedField: 'phase2_completed',
+      completedAtField: 'phase2_completed_at',
     },
     {
+      num: 3,
       label: 'Phase 3 — Final',
-      milestone: goal.milestone_3 || goal.milestone_90 || `Complete ${goal.title} — achieve the exact outcome you set out for`,
+      milestone: goal.milestone_90 || goal.milestone_3,
       actions: (goal.phase3Actions || goal.phase3_actions || '').split('|').filter((a: string) => a.trim()),
-      done: goal.phase3_completed,
-      dueDate: new Date(startDate.getTime() + totalDays * 86400000),
+      done: !!goal.phase3_completed,
+      completedAt: goal.phase3_completed_at,
+      plannedDate: new Date(startDate.getTime() + totalDays * 86400000),
       dayTarget: totalDays,
+      completedField: 'phase3_completed',
+      completedAtField: 'phase3_completed_at',
     },
   ]
+
+  const markComplete = async (phase: typeof phases[0]) => {
+    if (completing !== null) return
+    setCompleting(phase.num)
+    const now = new Date().toISOString()
+    const { data } = await supabase.from('goals').update({
+      [phase.completedField]: true,
+      [phase.completedAtField]: now,
+    }).eq('id', goal.id).select().single()
+    if (data) onGoalUpdate(data)
+    setCompleting(null)
+    toast.success(`Phase ${phase.num} marked complete! 🎉`)
+  }
+
+  const unmarkComplete = async (phase: typeof phases[0]) => {
+    setCompleting(phase.num)
+    const { data } = await supabase.from('goals').update({
+      [phase.completedField]: false,
+      [phase.completedAtField]: null,
+    }).eq('id', goal.id).select().single()
+    if (data) onGoalUpdate(data)
+    setCompleting(null)
+  }
 
   return (
     <div className="bg-white border border-[#e8e8e8] rounded-2xl p-6 mb-4">
@@ -60,37 +98,92 @@ function RoadmapSection({ goal }: { goal: any }) {
       <div className="h-1.5 bg-[#f0ede8] rounded-full overflow-hidden mb-5">
         <div className="h-full bg-[#b8922a] rounded-full transition-all duration-700" style={{ width: `${pct}%` }}/>
       </div>
-      <div className="space-y-4">
+
+      <div className="space-y-3">
         {phases.map((p, i) => {
-          const isPast = today > p.dueDate && !p.done
-          const isCurrent = !p.done && daysPassed < p.dayTarget && (i === 0 || daysPassed >= phases[i-1]?.dayTarget)
-          const statusColor = p.done ? 'bg-green-500' : isCurrent ? 'bg-[#b8922a]' : 'bg-[#e0ddd8]'
-          const badgeStyle = p.done ? 'bg-green-50 text-green-700' : isCurrent ? 'bg-[#faf3e0] text-[#b8922a]' : isPast ? 'bg-red-50 text-red-500' : 'bg-[#f2f0ec] text-[#999]'
-          const badgeText = p.done ? 'Done ✓' : isCurrent ? 'In progress' : isPast ? 'Overdue' : `Starts day ${i === 0 ? 1 : phases[i-1].dayTarget}`
+          const prevDone = i === 0 || phases[i-1].done
+          const isPast = !p.done && today > p.plannedDate
+          const isCurrent = !p.done && prevDone && daysPassed < p.dayTarget
+          const isLocked = !p.done && !prevDone
+          const displayDate = p.done && p.completedAt
+            ? new Date(p.completedAt)
+            : p.plannedDate
+
+          let statusBg = 'bg-[#e0ddd8]'
+          let cardBorder = 'border-[#f0ede8]'
+          if (p.done) { statusBg = 'bg-green-500'; cardBorder = 'border-green-200 bg-green-50/30' }
+          else if (isCurrent) { statusBg = 'bg-[#b8922a]'; cardBorder = 'border-[#b8922a]/30 bg-[#faf9f7]' }
+          else if (isPast) { statusBg = 'bg-red-400'; cardBorder = 'border-red-100' }
+
+          const badgeStyle = p.done ? 'bg-green-100 text-green-700'
+            : isCurrent ? 'bg-[#faf3e0] text-[#b8922a]'
+            : isPast ? 'bg-red-50 text-red-500'
+            : 'bg-[#f2f0ec] text-[#999]'
+          const badgeText = p.done ? `Done ✓ ${p.completedAt ? '(early!)' : ''}`
+            : isCurrent ? 'In progress'
+            : isPast ? 'Overdue'
+            : `Starts day ${i === 0 ? 1 : phases[i-1].dayTarget + 1}`
+
           return (
-            <div key={p.label} className={`border rounded-xl p-4 ${isCurrent ? 'border-[#b8922a]/30 bg-[#faf9f7]' : 'border-[#f0ede8]'}`}>
+            <div key={p.label} className={`border rounded-2xl p-4 transition-all ${cardBorder}`}>
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2.5">
-                  <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center ${statusColor}`}>
-                    {p.done && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5"><polyline points="20 6 9 17 4 12"/></svg>}
-                    {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-white"/>}
+                  <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center ${statusBg}`}>
+                    {p.done
+                      ? <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      : isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-white"/>
+                    }
                   </div>
                   <p className="text-[11px] font-bold text-[#b8922a] uppercase tracking-[.1em]">{p.label}</p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-[11px] text-[#999]">{p.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <span className="text-[11px] text-[#999]">
+                    {p.done && p.completedAt
+                      ? `Completed ${displayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                      : displayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
                   <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeStyle}`}>{badgeText}</span>
                 </div>
               </div>
-              <p className="text-[14px] text-[#111] leading-[1.6] mb-2 ml-6">{p.milestone}</p>
+
+              {/* Milestone goal */}
+              {p.milestone ? (
+                <p className="text-[14px] text-[#111] leading-[1.6] mb-2 ml-6 font-medium">{p.milestone}</p>
+              ) : (
+                <p className="text-[13px] text-[#999] italic ml-6 mb-2">Create a new goal to generate specific phase targets.</p>
+              )}
+
+              {/* Actions */}
               {p.actions.length > 0 && (
-                <div className="ml-6 space-y-1">
-                  {p.actions.filter((a: string) => a.trim()).map((action: string, ai: number) => (
+                <div className="ml-6 space-y-1 mb-3">
+                  {p.actions.map((action: string, ai: number) => (
                     <div key={ai} className="flex items-start gap-2">
                       <span className="text-[#b8922a] text-[11px] mt-[3px] flex-shrink-0">→</span>
                       <p className="text-[12px] text-[#666] leading-[1.5]">{action.trim()}</p>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Mark complete / undo button */}
+              {!isLocked && (
+                <div className="ml-6 mt-2">
+                  {p.done ? (
+                    <button onClick={() => unmarkComplete(p)}
+                      disabled={completing === p.num}
+                      className="text-[11px] text-[#999] hover:text-red-500 transition-colors underline underline-offset-2">
+                      {completing === p.num ? 'Updating...' : 'Undo completion'}
+                    </button>
+                  ) : (
+                    <button onClick={() => markComplete(p)}
+                      disabled={completing === p.num}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#111] text-white rounded-xl text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors disabled:opacity-50">
+                      {completing === p.num
+                        ? 'Saving...'
+                        : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg> Mark phase complete</>
+                      }
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -100,6 +193,7 @@ function RoadmapSection({ goal }: { goal: any }) {
     </div>
   )
 }
+
 
 export default function GoalPage() {
   const supabase = createClient()
@@ -432,7 +526,10 @@ export default function GoalPage() {
         </div>
       </div>
 
-      <RoadmapSection goal={goal} />
+      <RoadmapSection goal={goal} onGoalUpdate={(updated) => {
+        setGoal(updated)
+        setGoals(prev => prev.map(g => g.id === updated.id ? updated : g))
+      }} />
 
       {/* Paused goals */}
       {pausedGoals.length > 0 && (
