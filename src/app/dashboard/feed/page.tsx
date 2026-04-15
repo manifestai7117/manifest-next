@@ -214,6 +214,8 @@ export default function FeedPage() {
   const [selectedGoalId, setSelectedGoalId] = useState('')
   const [feedFilter, setFeedFilter] = useState<'all'|'friends'|'public'>('all')
   const [showArchived, setShowArchived] = useState(false)
+  const [archivedPosts, setArchivedPosts] = useState<Post[]>([])
+  const [loadingArchived, setLoadingArchived] = useState(false)
   const [pullStart, setPullStart] = useState(0)
   const [pullDist, setPullDist] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -322,6 +324,22 @@ export default function FeedPage() {
     })))
   }, [user])
 
+  const loadArchivedPosts = useCallback(async () => {
+    if (!user) return
+    setLoadingArchived(true)
+    const { data: archived } = await supabase.from('feed_posts').select('*').eq('user_id', user.id).eq('is_archived', true).order('created_at', { ascending: false }).limit(20)
+    if (!archived?.length) { setArchivedPosts([]); setLoadingArchived(false); return }
+    const postIds = archived.map((p: any) => p.id)
+    const { data: myLikes } = await supabase.from('post_likes').select('post_id').eq('user_id', user.id)
+    const likedIds = new Set((myLikes || []).map((l: any) => l.post_id))
+    const { data: allLikes } = await supabase.from('post_likes').select('post_id').in('post_id', postIds)
+    const likeCounts: Record<string, number> = {}
+    ;(allLikes || []).forEach((l: any) => { likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1 })
+    const { data: prof } = await supabase.from('profiles').select('id, full_name, avatar_url, plan').eq('id', user.id).single()
+    setArchivedPosts(archived.map((p: any) => ({ ...p, profiles: prof, likes_count: likeCounts[p.id] || 0, user_liked: likedIds.has(p.id), comments: [], comment_count: 0 })))
+    setLoadingArchived(false)
+  }, [user])
+
   const refresh = async () => {
     setRefreshing(true)
     await loadFeed()
@@ -367,8 +385,17 @@ export default function FeedPage() {
 
   const archivePost = async (postId: string, archive: boolean) => {
     await supabase.from('feed_posts').update({ is_archived: archive }).eq('id', postId).eq('user_id', user.id)
-    if (!showArchived) setPosts(prev => prev.filter(p => p.id !== postId))
-    else setPosts(prev => prev.map(p => p.id === postId ? { ...p, is_archived: archive } : p))
+    if (archive) {
+      // Move from feed to archived
+      const post = posts.find(p => p.id === postId)
+      if (post) setArchivedPosts(prev => [{ ...post, is_archived: true }, ...prev])
+      setPosts(prev => prev.filter(p => p.id !== postId))
+    } else {
+      // Move from archived back to feed
+      const post = archivedPosts.find(p => p.id === postId)
+      if (post) setPosts(prev => [{ ...post, is_archived: false }, ...prev])
+      setArchivedPosts(prev => prev.filter(p => p.id !== postId))
+    }
     toast.success(archive ? 'Archived' : 'Unarchived')
   }
 
@@ -397,12 +424,13 @@ export default function FeedPage() {
   const onTouchMove = (e: React.TouchEvent) => { if (scrollRef.current?.scrollTop === 0) setPullDist(Math.max(0, Math.min(80, e.touches[0].clientY - pullStart))) }
   const onTouchEnd = async () => { if (pullDist > 60) await refresh(); setPullDist(0) }
 
-  const filteredPosts = posts.filter(p => {
-    if (!showArchived && p.is_archived) return false
-    if (feedFilter === 'friends' && p.user_id !== user?.id && p.visibility === 'public' && posts.some(pp => pp.user_id === p.user_id && pp.user_id !== user?.id)) return p.profiles !== undefined
-    if (feedFilter === 'public') return p.visibility === 'public'
-    return true
-  })
+  const filteredPosts = showArchived
+    ? archivedPosts
+    : posts.filter(p => {
+        if (feedFilter === 'public') return p.visibility === 'public'
+        if (feedFilter === 'friends') return p.user_id === user?.id || p.visibility !== 'public'
+        return true
+      })
 
   return (
     <div className="fade-up max-w-[680px]">
@@ -430,7 +458,7 @@ export default function FeedPage() {
             {label}
           </button>
         ))}
-        <button onClick={() => setShowArchived(!showArchived)}
+        <button onClick={() => { setShowArchived(prev => { if (!prev) loadArchivedPosts(); return !prev }) }}
           className={`px-3.5 py-1.5 rounded-full text-[12px] font-medium border transition-all ${showArchived ? 'bg-[#b8922a] text-white border-[#b8922a]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
           📦 Archived
         </button>

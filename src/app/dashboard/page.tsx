@@ -35,7 +35,8 @@ export default async function DashboardPage() {
   const goalsWithProgress = goals.map((goal: any) => {
     const totalDays = timelineMap[goal.timeline] || 90
     const startDate = new Date(goal.created_at)
-    const daysPassed = Math.max(0, Math.floor((Date.now() - startDate.getTime()) / 86400000))
+    const rawDays = Math.floor((Date.now() - startDate.getTime()) / 86400000)
+    const daysPassed = Math.max(0, rawDays, goal.streak || 0)
     const streakBonus = Math.min(30, Math.round(((goal.streak || 0) / Math.max(totalDays, 1)) * 30))
     const timeProgress = Math.min(70, Math.round((daysPassed / totalDays) * 70))
     const computedProgress = Math.min(100, timeProgress + streakBonus)

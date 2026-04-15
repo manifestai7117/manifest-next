@@ -40,7 +40,7 @@ export default function ProfilePage() {
         supabase.from('goals').select('*').eq('user_id', user.id).eq('is_active', true).eq('is_paused', true).order('paused_at', { ascending: false }),
         supabase.from('goals').select('title, completed_at, success_note').eq('user_id', user.id).eq('is_active', false).not('completed_at', 'is', null).order('completed_at', { ascending: false }),
         supabase.from('rewards').select('*').eq('user_id', user.id).order('earned_at', { ascending: false }),
-        supabase.from('feed_posts').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('feed_posts').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_archived', false),
         supabase.from('checkins').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
       ])
 

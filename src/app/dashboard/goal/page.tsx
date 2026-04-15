@@ -17,7 +17,10 @@ function RoadmapSection({ goal }: { goal: any }) {
   const totalDays = TIMELINE_DAYS[goal.timeline] || 90
   const startDate = new Date(goal.created_at)
   const today = new Date()
-  const daysPassed = Math.max(0, Math.floor((today.getTime() - startDate.getTime()) / 86400000))
+  // Use the greater of: actual days since creation OR current streak
+  // This handles timezone edge cases where same-day creation shows 0
+  const rawDays = Math.floor((today.getTime() - startDate.getTime()) / 86400000)
+  const daysPassed = Math.max(0, rawDays, goal.streak || 0)
   const pct = Math.min(100, Math.round((daysPassed / totalDays) * 100))
 
   const phases = [
@@ -114,13 +117,19 @@ export default function GoalPage() {
   const [showPauseModal, setShowPauseModal] = useState(false)
   const [pausing, setPausing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [resuming, setResuming] = useState(false)
+  const [pausedGoals, setPausedGoals] = useState<any[]>([])
   const [pauseReason, setPauseReason] = useState('')
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: gs } = await supabase.from('goals').select('*').eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: false })
+      const [{ data: gs }, { data: paused }] = await Promise.all([
+        supabase.from('goals').select('*').eq('user_id', user.id).eq('is_active', true).eq('is_paused', false).order('created_at', { ascending: false }),
+        supabase.from('goals').select('*').eq('user_id', user.id).eq('is_active', true).eq('is_paused', true).order('paused_at', { ascending: false }),
+      ])
+      setPausedGoals(paused || [])
       setGoals(gs || [])
       const savedId = typeof window !== 'undefined' ? localStorage.getItem('selectedGoalId') : null
       const g = gs?.find((x: any) => x.id === savedId) || gs?.[0] || null
@@ -147,6 +156,20 @@ export default function GoalPage() {
     setPausing(false)
     toast.success('Goal paused. You can resume it from your profile.')
     router.push('/dashboard')
+  }
+
+  const resumeGoal = async (goalId: string) => {
+    setResuming(true)
+    await supabase.from('goals').update({ is_paused: false, paused_at: null, pause_reason: null }).eq('id', goalId)
+    const resumed = pausedGoals.find(g => g.id === goalId)
+    if (resumed) {
+      setGoals(prev => [{ ...resumed, is_paused: false }, ...prev])
+      setPausedGoals(prev => prev.filter(g => g.id !== goalId))
+      setGoal({ ...resumed, is_paused: false })
+      setForm({ title: resumed.title, timeline: resumed.timeline, why: resumed.why })
+    }
+    setResuming(false)
+    toast.success('Goal resumed!')
   }
 
   const deleteGoal = async () => {
@@ -410,6 +433,30 @@ export default function GoalPage() {
       </div>
 
       <RoadmapSection goal={goal} />
+
+      {/* Paused goals */}
+      {pausedGoals.length > 0 && (
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
+          <p className="font-medium text-[14px] mb-3">⏸ Paused goals <span className="text-[#999] font-normal">({pausedGoals.length})</span></p>
+          <div className="space-y-2">
+            {pausedGoals.map(g => (
+              <div key={g.id} className="flex items-center gap-3 p-3 bg-[#f8f7f5] rounded-xl">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium">{g.title}</p>
+                  <p className="text-[11px] text-[#999] mt-0.5">
+                    Paused {g.paused_at ? new Date(g.paused_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}{g.pause_reason ? ` · ${g.pause_reason}` : ''}
+                    {' · '}<span className="text-[#b8922a]">{g.streak} day streak saved</span>
+                  </p>
+                </div>
+                <button onClick={() => resumeGoal(g.id)} disabled={resuming}
+                  className="flex-shrink-0 px-3 py-1.5 bg-[#111] text-white rounded-lg text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors disabled:opacity-50">
+                  {resuming ? '...' : '▶ Resume'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-[#111] rounded-2xl p-6">
         <p className="text-[10px] font-medium tracking-[.12em] uppercase text-white/30 mb-3">Your affirmation</p>
