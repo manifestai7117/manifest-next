@@ -15,6 +15,10 @@ export default function CirclesPage() {
   const [inp, setInp] = useState('')
   const [sending, setSending] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newCircle, setNewCircle] = useState({ name: '', category: '', goal_description: '' })
   const [showMembers, setShowMembers] = useState(false)
   const [viewingMember, setViewingMember] = useState<string | null>(null)
   const [clearedAt, setClearedAt] = useState<Record<string, string>>({})
@@ -24,6 +28,8 @@ export default function CirclesPage() {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
+      const { data: prof } = await supabase.from('profiles').select('plan').eq('id', user?.id).single()
+      setProfile(prof)
       const { data: memberOf } = await supabase.from('circle_members').select('circle_id').eq('user_id', user?.id)
       const myIds = (memberOf || []).map((x: any) => x.circle_id)
       const { data: c } = myIds.length 
@@ -120,6 +126,27 @@ export default function CirclesPage() {
     }
     toast.success('Joined! Welcome to the circle.')
     await openCircle(circles.find(c => c.id === circleId))
+  }
+
+  const createCircle = async () => {
+    if (!newCircle.name.trim() || !newCircle.category || !newCircle.goal_description.trim() || creating) return
+    setCreating(true)
+    const { data, error } = await supabase.from('circles').insert({
+      name: newCircle.name.trim(),
+      category: newCircle.category,
+      goal_description: newCircle.goal_description.trim(),
+      created_by: user.id,
+      member_count: 1,
+    }).select().single()
+    if (error || !data) { toast.error('Could not create circle'); setCreating(false); return }
+    await supabase.from('circle_members').insert({ circle_id: data.id, user_id: user.id })
+    setCircles(prev => [data, ...prev])
+    setMyCircleIds(prev => [...prev, data.id])
+    setMemberCounts(prev => ({ ...prev, [data.id]: 1 }))
+    setNewCircle({ name: '', category: '', goal_description: '' })
+    setShowCreate(false)
+    setCreating(false)
+    toast.success('Circle created!')
   }
 
   const sendMsg = async () => {
@@ -233,13 +260,71 @@ export default function CirclesPage() {
   )
 }
 
+  const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
+  const CATEGORIES = ['Health & fitness','Career & business','Financial freedom','Learning & skills','Personal growth','Travel & adventure','Creative work','Other']
+
   return (
     <div className="fade-up max-w-[900px]">
-      <h1 className="font-serif text-[32px] mb-1">Goal Circles</h1>
-      <p className="text-[14px] text-[#666] mb-8">Groups working toward the same goal. Real accountability.</p>
+      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h1 className="font-serif text-[32px] mb-1">Goal Circles</h1>
+          <p className="text-[14px] text-[#666]">Your accountability groups</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <a href="/dashboard/circles/discover"
+            className="px-4 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
+            ⊕ Discover circles
+          </a>
+          {isPro ? (
+            <button onClick={() => setShowCreate(!showCreate)}
+              className="px-4 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">
+              + Create circle
+            </button>
+          ) : (
+            <a href="/dashboard/upgrade"
+              className="px-4 py-2.5 border border-[#b8922a]/40 bg-[#faf3e0] rounded-xl text-[13px] font-medium text-[#b8922a] hover:bg-[#f5e8c0] transition-colors">
+              ★ Pro to create
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* Create circle form */}
+      {showCreate && isPro && (
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-5">
+          <p className="font-medium text-[15px] mb-4">Create a new circle</p>
+          <div className="space-y-3">
+            <input value={newCircle.name} onChange={e => setNewCircle(p => ({ ...p, name: e.target.value }))}
+              placeholder="Circle name e.g. Marathon Runners 2025"
+              className="w-full border border-[#e8e8e8] rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#111]"/>
+            <select value={newCircle.category} onChange={e => setNewCircle(p => ({ ...p, category: e.target.value }))}
+              className="w-full border border-[#e8e8e8] rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#111]">
+              <option value="">Select category...</option>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <textarea value={newCircle.goal_description} onChange={e => setNewCircle(p => ({ ...p, goal_description: e.target.value }))}
+              placeholder="What shared goal does this circle work toward?"
+              className="w-full border border-[#e8e8e8] rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#111] resize-none"
+              rows={2}/>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowCreate(false)} className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#666]">Cancel</button>
+              <button onClick={createCircle} disabled={creating || !newCircle.name || !newCircle.category || !newCircle.goal_description}
+                className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px] font-medium disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors">
+                {creating ? 'Creating...' : 'Create circle'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {circles.length === 0 ? (
-        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-8 text-center">
-          <p className="text-[#666] text-[14px]">No circles yet.</p>
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-10 text-center">
+          <p className="text-[40px] mb-3">◉</p>
+          <p className="font-medium text-[16px] mb-2">No circles yet</p>
+          <p className="text-[14px] text-[#666] mb-5">Join a circle or discover one to find your community.</p>
+          <a href="/dashboard/circles/discover" className="inline-block px-5 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium">
+            Discover circles →
+          </a>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

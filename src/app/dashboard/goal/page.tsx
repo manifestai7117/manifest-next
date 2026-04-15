@@ -16,73 +16,83 @@ const TIMELINE_DAYS: Record<string, number> = {
 function RoadmapSection({ goal }: { goal: any }) {
   const totalDays = TIMELINE_DAYS[goal.timeline] || 90
   const startDate = new Date(goal.created_at)
+  const today = new Date()
+  const daysPassed = Math.max(0, Math.floor((today.getTime() - startDate.getTime()) / 86400000))
+  const pct = Math.min(100, Math.round((daysPassed / totalDays) * 100))
 
   const phases = [
     {
       label: 'Phase 1',
-      milestone: goal.milestone_1 || goal.milestone_30 || `Complete first ${Math.round(totalDays * 0.33)} days consistently`,
+      milestone: goal.milestone_1 || goal.milestone_30 || `Build the foundation for ${goal.title} — establish daily habits and hit your first measurable target`,
+      actions: (goal.phase1Actions || goal.phase1_actions || '').split('|').filter((a: string) => a.trim()),
       done: goal.phase1_completed,
       dueDate: new Date(startDate.getTime() + Math.round(totalDays * 0.33) * 86400000),
       dayTarget: Math.round(totalDays * 0.33),
     },
     {
       label: 'Phase 2',
-      milestone: goal.milestone_2 || goal.milestone_60 || `Reach ${Math.round(totalDays * 0.66)} days of progress`,
+      milestone: goal.milestone_2 || goal.milestone_60 || `Build momentum — increase intensity and hit your mid-point milestone for ${goal.title}`,
+      actions: (goal.phase2Actions || goal.phase2_actions || '').split('|').filter((a: string) => a.trim()),
       done: goal.phase2_completed,
       dueDate: new Date(startDate.getTime() + Math.round(totalDays * 0.66) * 86400000),
       dayTarget: Math.round(totalDays * 0.66),
     },
     {
       label: 'Phase 3 — Final',
-      milestone: goal.milestone_3 || goal.milestone_90 || `Complete the full ${goal.timeline} journey`,
+      milestone: goal.milestone_3 || goal.milestone_90 || `Complete ${goal.title} — achieve the exact outcome you set out for`,
+      actions: (goal.phase3Actions || goal.phase3_actions || '').split('|').filter((a: string) => a.trim()),
       done: goal.phase3_completed,
       dueDate: new Date(startDate.getTime() + totalDays * 86400000),
       dayTarget: totalDays,
     },
   ]
 
-  const today = new Date()
-  const daysPassed = Math.floor((today.getTime() - startDate.getTime()) / 86400000)
-
   return (
     <div className="bg-white border border-[#e8e8e8] rounded-2xl p-6 mb-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <p className="font-medium text-[15px]">Roadmap</p>
-        <span className="text-[11px] text-[#999]">Day {daysPassed} of {totalDays}</span>
+        <span className="text-[11px] text-[#999]">Day {daysPassed} of {totalDays} · {pct}%</span>
       </div>
-      <div className="relative">
-        {/* Progress line */}
-        <div className="absolute left-[15px] top-4 bottom-4 w-0.5 bg-[#f0ede8]"/>
-        <div className="absolute left-[15px] top-4 w-0.5 bg-[#b8922a] transition-all duration-700"
-          style={{ height: `${Math.min(100, (daysPassed / totalDays) * 100)}%` }}/>
-        <div className="space-y-0">
-          {phases.map((p, i) => {
-            const isPast = today > p.dueDate
-            const isCurrent = !p.done && daysPassed < p.dayTarget && (i === 0 || daysPassed >= phases[i-1]?.dayTarget)
-            return (
-              <div key={p.label} className={`flex gap-4 pl-2 py-4 ${i < phases.length - 1 ? 'border-b border-[#f0ede8]' : ''}`}>
-                <div className={`w-[18px] h-[18px] rounded-full flex-shrink-0 mt-0.5 flex items-center justify-center z-10 ${p.done ? 'bg-green-500' : isCurrent ? 'bg-[#b8922a]' : 'bg-[#e8e8e8]'}`}>
-                  {p.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-                  {isCurrent && <span className="w-2 h-2 rounded-full bg-white"/>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 flex-wrap">
-                    <div>
-                      <p className="text-[11px] font-semibold text-[#b8922a] uppercase tracking-[.08em] mb-0.5">{p.label}</p>
-                      <p className="text-[14px] text-[#111] leading-[1.55]">{p.milestone}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-[11px] text-[#999]">{p.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-                      <p className={`text-[10px] font-medium mt-0.5 px-2 py-0.5 rounded-full ${p.done ? 'bg-green-50 text-green-700' : isCurrent ? 'bg-[#faf3e0] text-[#b8922a]' : isPast ? 'bg-red-50 text-red-600' : 'bg-[#f2f0ec] text-[#999]'}`}>
-                        {p.done ? 'Done ✓' : isCurrent ? 'In progress' : isPast ? 'Overdue' : `Day ${p.dayTarget}`}
-                      </p>
-                    </div>
+      {/* Progress bar */}
+      <div className="h-1.5 bg-[#f0ede8] rounded-full overflow-hidden mb-5">
+        <div className="h-full bg-[#b8922a] rounded-full transition-all duration-700" style={{ width: `${pct}%` }}/>
+      </div>
+      <div className="space-y-4">
+        {phases.map((p, i) => {
+          const isPast = today > p.dueDate && !p.done
+          const isCurrent = !p.done && daysPassed < p.dayTarget && (i === 0 || daysPassed >= phases[i-1]?.dayTarget)
+          const statusColor = p.done ? 'bg-green-500' : isCurrent ? 'bg-[#b8922a]' : 'bg-[#e0ddd8]'
+          const badgeStyle = p.done ? 'bg-green-50 text-green-700' : isCurrent ? 'bg-[#faf3e0] text-[#b8922a]' : isPast ? 'bg-red-50 text-red-500' : 'bg-[#f2f0ec] text-[#999]'
+          const badgeText = p.done ? 'Done ✓' : isCurrent ? 'In progress' : isPast ? 'Overdue' : `Starts day ${i === 0 ? 1 : phases[i-1].dayTarget}`
+          return (
+            <div key={p.label} className={`border rounded-xl p-4 ${isCurrent ? 'border-[#b8922a]/30 bg-[#faf9f7]' : 'border-[#f0ede8]'}`}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center ${statusColor}`}>
+                    {p.done && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5"><polyline points="20 6 9 17 4 12"/></svg>}
+                    {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-white"/>}
                   </div>
+                  <p className="text-[11px] font-bold text-[#b8922a] uppercase tracking-[.1em]">{p.label}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-[11px] text-[#999]">{p.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeStyle}`}>{badgeText}</span>
                 </div>
               </div>
-            )
-          })}
-        </div>
+              <p className="text-[14px] text-[#111] leading-[1.6] mb-2 ml-6">{p.milestone}</p>
+              {p.actions.length > 0 && (
+                <div className="ml-6 space-y-1">
+                  {p.actions.filter((a: string) => a.trim()).map((action: string, ai: number) => (
+                    <div key={ai} className="flex items-start gap-2">
+                      <span className="text-[#b8922a] text-[11px] mt-[3px] flex-shrink-0">→</span>
+                      <p className="text-[12px] text-[#666] leading-[1.5]">{action.trim()}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -267,7 +277,7 @@ export default function GoalPage() {
           {goals.map(g => (
             <button key={g.id} onClick={() => selectGoal(g)}
               className={`px-4 py-2 rounded-full text-[13px] border transition-all ${goal?.id === g.id ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#666] border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>
-              {(g.display_title || g.title).slice(0, 28)}
+              {g.display_title || g.title}
             </button>
           ))}
         </div>
