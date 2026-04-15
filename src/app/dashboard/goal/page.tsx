@@ -8,6 +8,51 @@ import { useRouter } from 'next/navigation'
 const TIMELINES = ['1 week','2 weeks','1 month','6 weeks','2 months','3 months','6 months','1 year','2 years']
 
 
+// Generate smart milestone text from goal context when DB fields are empty
+function autoMilestone(goal: any, phase: number): string {
+  const title = goal.title || 'your goal'
+  const cat = (goal.category || '').toLowerCase()
+  const timeline = goal.timeline || '3 months'
+  const TIMELINE_DAYS: Record<string, number> = {
+    '1 week': 7, '2 weeks': 14, '1 month': 30, '6 weeks': 42,
+    '2 months': 60, '3 months': 90, '6 months': 180, '1 year': 365, '2 years': 730,
+  }
+  const totalDays = TIMELINE_DAYS[timeline] || 90
+  const d1 = Math.round(totalDays * 0.33), d2 = Math.round(totalDays * 0.66)
+
+  if (cat.includes('fitness') || cat.includes('health') || cat.includes('run')) {
+    const targets = [
+      `Build your base — establish a consistent ${Math.ceil(totalDays/30) * 3}x/week training habit and complete your first ${Math.round(d1)}-day streak`,
+      `Build intensity — increase duration/weight by 20%, hit a personal best, and maintain 4x/week consistency through day ${d2}`,
+      `Peak performance — complete "${title}" at full capacity and set a new personal record`,
+    ]
+    return targets[phase - 1] || targets[0]
+  }
+  if (cat.includes('career') || cat.includes('business') || cat.includes('skill')) {
+    const targets = [
+      `Foundation phase — complete the core learning modules, apply the skill in at least 3 real situations by day ${d1}`,
+      `Applied phase — lead a project using this skill, get feedback from peers, and build a portfolio piece by day ${d2}`,
+      `Mastery phase — demonstrate expert-level results and achieve "${title}" with measurable outcomes`,
+    ]
+    return targets[phase - 1] || targets[0]
+  }
+  if (cat.includes('financial') || cat.includes('money')) {
+    const targets = [
+      `Set up systems — automate savings, cut 1 major expense, hit your first monthly savings target by day ${d1}`,
+      `Build momentum — reach 50% of your financial target, track every expense, stay on budget for ${d2} days straight`,
+      `Hit the goal — achieve "${title}" and build an additional 10% buffer`,
+    ]
+    return targets[phase - 1] || targets[0]
+  }
+  // Generic smart fallbacks based on timeline fraction
+  const targets = [
+    `Establish daily habits for "${title}" — check in every day, track progress, and hit your first ${d1}-day consistency milestone`,
+    `Double down — increase effort, push through resistance, and reach the halfway point of "${title}" by day ${d2}`,
+    `Complete "${title}" — achieve the specific outcome you set out for and document your results`,
+  ]
+  return targets[phase - 1] || targets[0]
+}
+
 const TIMELINE_DAYS: Record<string, number> = {
   '1 week': 7, '2 weeks': 14, '1 month': 30, '6 weeks': 42,
   '2 months': 60, '3 months': 90, '6 months': 180, '1 year': 365, '2 years': 730,
@@ -29,7 +74,7 @@ function RoadmapSection({ goal, onGoalUpdate }: { goal: any; onGoalUpdate: (upda
     {
       num: 1,
       label: 'Phase 1',
-      milestone: goal.milestone_30 || goal.milestone_1,
+      milestone: goal.milestone_30 || goal.milestone_1 || autoMilestone(goal, 1),
       actions: (goal.phase1Actions || goal.phase1_actions || '').split('|').filter((a: string) => a.trim()),
       done: !!goal.phase1_completed,
       completedAt: goal.phase1_completed_at,
@@ -42,7 +87,7 @@ function RoadmapSection({ goal, onGoalUpdate }: { goal: any; onGoalUpdate: (upda
     {
       num: 2,
       label: 'Phase 2',
-      milestone: goal.milestone_60 || goal.milestone_2,
+      milestone: goal.milestone_60 || goal.milestone_2 || autoMilestone(goal, 2),
       actions: (goal.phase2Actions || goal.phase2_actions || '').split('|').filter((a: string) => a.trim()),
       done: !!goal.phase2_completed,
       completedAt: goal.phase2_completed_at,
@@ -54,7 +99,7 @@ function RoadmapSection({ goal, onGoalUpdate }: { goal: any; onGoalUpdate: (upda
     {
       num: 3,
       label: 'Phase 3 — Final',
-      milestone: goal.milestone_90 || goal.milestone_3,
+      milestone: goal.milestone_90 || goal.milestone_3 || autoMilestone(goal, 3),
       actions: (goal.phase3Actions || goal.phase3_actions || '').split('|').filter((a: string) => a.trim()),
       done: !!goal.phase3_completed,
       completedAt: goal.phase3_completed_at,
@@ -69,13 +114,17 @@ function RoadmapSection({ goal, onGoalUpdate }: { goal: any; onGoalUpdate: (upda
     if (completing !== null) return
     setCompleting(phase.num)
     const now = new Date().toISOString()
+    // Progress: Phase 1 = 33%, Phase 2 = 66%, Phase 3 = 100%
+    const phaseProgress = { 1: 33, 2: 66, 3: 100 }[phase.num] || 33
+    const newProgress = Math.max(goal.progress || 0, phaseProgress)
     const { data } = await supabase.from('goals').update({
       [phase.completedField]: true,
       [phase.completedAtField]: now,
+      progress: newProgress,
     }).eq('id', goal.id).select().single()
     if (data) onGoalUpdate(data)
     setCompleting(null)
-    toast.success(`Phase ${phase.num} marked complete! 🎉`)
+    toast.success(`Phase ${phase.num} complete! Progress updated to ${newProgress}% 🎉`)
   }
 
   const unmarkComplete = async (phase: typeof phases[0]) => {
@@ -248,7 +297,8 @@ export default function GoalPage() {
     setGoals(prev => prev.filter(g => g.id !== goal.id))
     setShowPauseModal(false)
     setPausing(false)
-    toast.success('Goal paused. You can resume it from your profile.')
+    toast.success('Goal paused.')
+    router.refresh()
     router.push('/dashboard')
   }
 
@@ -263,7 +313,8 @@ export default function GoalPage() {
       setForm({ title: resumed.title, timeline: resumed.timeline, why: resumed.why })
     }
     setResuming(false)
-    toast.success('Goal resumed!')
+    toast.success('Goal resumed! 🎯')
+    router.refresh()
   }
 
   const deleteGoal = async () => {

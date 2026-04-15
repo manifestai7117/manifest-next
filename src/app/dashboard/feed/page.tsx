@@ -391,10 +391,13 @@ export default function FeedPage() {
       if (post) setArchivedPosts(prev => [{ ...post, is_archived: true }, ...prev])
       setPosts(prev => prev.filter(p => p.id !== postId))
     } else {
-      // Move from archived back to feed
+      // Move from archived back to feed and switch to feed tab
       const post = archivedPosts.find(p => p.id === postId)
       if (post) setPosts(prev => [{ ...post, is_archived: false }, ...prev])
       setArchivedPosts(prev => prev.filter(p => p.id !== postId))
+      setShowArchived(false) // auto-switch to feed so user sees restored post
+      toast.success('Post restored to your feed ✓')
+      return
     }
     toast.success(archive ? 'Archived' : 'Unarchived')
   }

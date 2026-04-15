@@ -74,6 +74,7 @@ AFFIRMATION: ${goal.affirmation}
 PHASE 1 TARGET: ${goal.milestone_30 || goal.milestone_1 || 'Not set'}
 PHASE 2 TARGET: ${goal.milestone_60 || goal.milestone_2 || 'Not set'}
 PHASE 3 TARGET: ${goal.milestone_90 || goal.milestone_3 || 'Not set'}
+PHASE COMPLETION STATUS: Phase 1 ${goal.phase1_completed ? `COMPLETED on ${new Date(goal.phase1_completed_at).toLocaleDateString()}` : 'not yet complete'} | Phase 2 ${goal.phase2_completed ? `COMPLETED on ${new Date(goal.phase2_completed_at).toLocaleDateString()}` : 'not yet complete'} | Phase 3 ${goal.phase3_completed ? 'COMPLETED' : 'not yet complete'}
 COACH SUMMARY FROM PREVIOUS SESSIONS: ${goal.coach_summary || 'No previous summary yet.'}
 `
       }
