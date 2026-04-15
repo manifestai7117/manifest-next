@@ -18,10 +18,11 @@ export async function GET(request: Request) {
   if (cached) return NextResponse.json({ insight: cached.insight, fresh: false })
 
   // Generate fresh insight
-  const [{ data: goal }, { data: checkins }, { data: rewards }] = await Promise.all([
+  const [{ data: goal }, { data: checkins }, { data: rewards }, { data: coachMsgs }] = await Promise.all([
     supabase.from('goals').select('*').eq('id', goalId).eq('user_id', user.id).single(),
     supabase.from('checkins').select('mood, note, created_at').eq('goal_id', goalId).order('created_at', { ascending: false }).limit(14),
     supabase.from('rewards').select('type, earned_at').eq('user_id', user.id),
+    supabase.from('coach_messages').select('role, content').eq('goal_id', goalId).order('created_at', { ascending: false }).limit(20),
   ])
 
   if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
@@ -35,9 +36,13 @@ export async function GET(request: Request) {
   const progressDiff = (goal.progress || 0) - expectedProgress
   const notes = checkins?.filter((c: any) => c.note).slice(0, 3).map((c: any) => c.note)
 
+  // Build coach conversation context
+  const recentCoach = (coachMsgs || []).slice(0, 10).reverse().map((m: any) => `${m.role === 'user' ? 'User' : 'Coach'}: ${m.content.slice(0, 100)}`).join('\n')
+  const coachContext = recentCoach ? `\nRECENT COACH CONVERSATIONS:\n${recentCoach}` : ''
+
   const res = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001', max_tokens: 150,
-    messages: [{ role: 'user', content: `Goal: "${goal.title}". Progress: ${goal.progress}% (expected ${expectedProgress}%, ${progressDiff >= 0 ? `${progressDiff}% ahead` : `${Math.abs(progressDiff)}% behind`} pace). Streak: ${goal.streak} days. Check-ins this week: ${checkinsThisWeek}/7. Avg mood: ${avgMood}/5. ${notes?.length ? `Recent notes: "${notes.join('", "')}"` : ''} Write 2-3 sentences of specific, honest insight about where they stand and one concrete next step. Reference their actual goal.` }]
+    messages: [{ role: 'user', content: `Goal: "${goal.title}".${coachContext}\n\nProgress: ${goal.progress}% (expected ${expectedProgress}%, ${progressDiff >= 0 ? `${progressDiff}% ahead` : `${Math.abs(progressDiff)}% behind`} pace). Streak: ${goal.streak} days. Check-ins this week: ${checkinsThisWeek}/7. Avg mood: ${avgMood}/5. ${notes?.length ? `Recent notes: "${notes.join('", "')}"` : ''} Write 2-3 sentences of specific, honest insight about where they stand and one concrete next step. Reference their actual goal.` }]
   })
   const insight = res.content[0].type === 'text' ? res.content[0].text.trim() : ''
 

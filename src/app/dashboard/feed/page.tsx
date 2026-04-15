@@ -3,17 +3,15 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
 type Profile = { id: string; full_name: string; avatar_url: string; plan: string }
 type Comment = { id: string; post_id: string; user_id: string; content: string; created_at: string; profiles?: Profile }
 type Post = {
-  id: string; user_id: string; content: string; post_type: string
-  created_at: string; profiles?: Profile; likes_count: number
-  user_liked: boolean; goal_title?: string; goal_id?: string
-  comments?: Comment[]; comment_count: number; show_comments?: boolean
+  id: string; user_id: string; content: string; post_type: string; visibility: string
+  created_at: string; profiles?: Profile; likes_count: number; user_liked: boolean
+  goal_title?: string; goal_id?: string; comments?: Comment[]; comment_count: number
+  is_archived?: boolean; relevance_score?: number
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const TYPE_CFG: Record<string, { emoji: string; color: string; bg: string }> = {
   achievement: { emoji: '🏆', color: 'text-yellow-700', bg: 'bg-yellow-50' },
   checkin:     { emoji: '✅', color: 'text-green-700',  bg: 'bg-green-50'  },
@@ -25,14 +23,10 @@ const TYPE_CFG: Record<string, { emoji: string; color: string; bg: string }> = {
 }
 const POST_TYPES = [
   { v: 'general', l: 'General' }, { v: 'achievement', l: 'Achievement' },
-  { v: 'checkin', l: 'Daily log' }, { v: 'goal_start', l: 'New goal' },
-  { v: 'feeling', l: 'Feeling' }, { v: 'reward', l: 'Reward' }, { v: 'milestone', l: 'Milestone' },
+  { v: 'checkin', l: 'Daily log' }, { v: 'feeling', l: 'Feeling' },
+  { v: 'reward', l: 'Reward' }, { v: 'milestone', l: 'Milestone' },
 ]
-const REPORT_REASONS = [
-  'Inappropriate / offensive content', 'Spam or self-promotion',
-  'Harassment or bullying', 'False information', 'Hate speech',
-  'Unrelated to goals / off-topic', 'Other',
-]
+const REPORT_REASONS = ['Inappropriate content', 'Spam', 'Harassment', 'False information', 'Hate speech', 'Off-topic', 'Other']
 
 function timeAgo(d: string) {
   const s = (Date.now() - new Date(d).getTime()) / 1000
@@ -42,7 +36,6 @@ function timeAgo(d: string) {
   return `${Math.floor(s/86400)}d`
 }
 
-// ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({ p, size = 10 }: { p: any; size?: number }) {
   const cls = `w-${size} h-${size} rounded-full flex-shrink-0`
   return p?.avatar_url
@@ -50,53 +43,43 @@ function Avatar({ p, size = 10 }: { p: any; size?: number }) {
     : <div className={`${cls} bg-[#b8922a] flex items-center justify-center text-white font-semibold text-[13px]`}>{p?.full_name?.[0]?.toUpperCase() || '?'}</div>
 }
 
-// ─── Report Modal ─────────────────────────────────────────────────────────────
 function ReportModal({ targetId, targetType, onClose }: { targetId: string; targetType: 'post'|'comment'; onClose: () => void }) {
   const supabase = createClient()
   const [reason, setReason] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
   const submit = async () => {
     if (!reason) return
-    setSubmitting(true)
     const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('content_reports').insert({ reporter_id: user?.id, target_id: targetId, target_type: targetType, reason })
     toast.success('Reported. Our team will review this.')
     onClose()
   }
-
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-[380px] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <h3 className="font-serif text-[20px] mb-1">Report {targetType}</h3>
-        <p className="text-[13px] text-[#666] mb-4">Why are you reporting this?</p>
-        <div className="space-y-2 mb-5">
+      <div className="bg-white rounded-2xl w-full max-w-[360px] p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="font-serif text-[18px] mb-3">Report {targetType}</h3>
+        <div className="space-y-1.5 mb-4">
           {REPORT_REASONS.map(r => (
             <button key={r} onClick={() => setReason(r)}
-              className={`w-full text-left px-4 py-2.5 rounded-xl border text-[13px] transition-all ${reason === r ? 'bg-[#111] text-white border-[#111]' : 'border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>
-              {r}
-            </button>
+              className={`w-full text-left px-3.5 py-2.5 rounded-xl border text-[13px] transition-all ${reason === r ? 'bg-[#111] text-white border-[#111]' : 'border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>{r}</button>
           ))}
         </div>
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
-          <button onClick={submit} disabled={!reason || submitting}
-            className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[13px] font-medium disabled:opacity-40 hover:bg-red-600 transition-colors">
-            {submitting ? 'Reporting...' : 'Submit report'}
-          </button>
+          <button onClick={submit} disabled={!reason} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[13px] font-medium disabled:opacity-40">Report</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Post Card ────────────────────────────────────────────────────────────────
-function PostCard({ post, userId, onLike, onDelete, onComment, onDeleteComment }: {
+function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDeleteComment, onBlock }: {
   post: Post; userId: string
   onLike: (p: Post) => void
   onDelete: (id: string) => void
+  onArchive: (id: string, archive: boolean) => void
   onComment: (postId: string, text: string) => Promise<void>
   onDeleteComment: (commentId: string, postId: string) => void
+  onBlock: (userId: string) => void
 }) {
   const [showComments, setShowComments] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -114,39 +97,45 @@ function PostCard({ post, userId, onLike, onDelete, onComment, onDeleteComment }
     setCommenting(false)
   }
 
+  const visibilityBadge = post.visibility === 'public' ? { label: '🌍 Public', cls: 'bg-blue-50 text-blue-700' } :
+    post.visibility === 'private' ? { label: '🔒 Only me', cls: 'bg-[#f2f0ec] text-[#666]' } :
+    { label: '👥 Friends', cls: 'bg-green-50 text-green-700' }
+
   return (
     <>
       {report && <ReportModal targetId={report.id} targetType={report.type} onClose={() => setReport(null)}/>}
-      <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden hover:border-[#d0d0d0] transition-all">
-        {/* Post header */}
+      <div className={`bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden transition-all ${post.is_archived ? 'opacity-60' : 'hover:border-[#d0d0d0]'}`}>
         <div className="p-5 pb-3">
           <div className="flex gap-3 mb-3">
             <Avatar p={post.profiles}/>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-[14px] font-semibold">{post.profiles?.full_name}</p>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${tc.bg} ${tc.color}`}>
-                  {tc.emoji} {POST_TYPES.find(t => t.v === post.post_type)?.l}
-                </span>
-                {post.goal_title && (
-                  <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full max-w-[140px] truncate">
-                    🎯 {post.goal_title}
-                  </span>
-                )}
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${tc.bg} ${tc.color}`}>{tc.emoji} {POST_TYPES.find(t => t.v === post.post_type)?.l}</span>
+                {post.goal_title && <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full max-w-[120px] truncate">🎯 {post.goal_title}</span>}
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${visibilityBadge.cls}`}>{visibilityBadge.label}</span>
+                {post.is_archived && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f2f0ec] text-[#999]">📦 Archived</span>}
               </div>
               <p className="text-[11px] text-[#999] mt-0.5">{timeAgo(post.created_at)}</p>
             </div>
-            {/* Menu */}
             <div className="relative">
               <button onClick={() => setShowMenu(!showMenu)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f0ede8] transition-colors text-[#999]">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
               </button>
               {showMenu && (
-                <div className="absolute right-0 top-8 bg-white border border-[#e8e8e8] rounded-xl shadow-lg z-20 min-w-[160px] overflow-hidden" onClick={() => setShowMenu(false)}>
+                <div className="absolute right-0 top-8 bg-white border border-[#e8e8e8] rounded-xl shadow-lg z-20 min-w-[170px] overflow-hidden" onClick={() => setShowMenu(false)}>
                   {isOwn ? (
-                    <button onClick={() => onDelete(post.id)} className="w-full text-left px-4 py-2.5 text-[13px] text-red-500 hover:bg-red-50 transition-colors">🗑 Delete post</button>
+                    <>
+                      <button onClick={() => onArchive(post.id, !post.is_archived)} className="w-full text-left px-4 py-2.5 text-[13px] text-[#666] hover:bg-[#f8f7f5]">
+                        {post.is_archived ? '📤 Unarchive' : '📦 Archive'}
+                      </button>
+                      <button onClick={() => onDelete(post.id)} className="w-full text-left px-4 py-2.5 text-[13px] text-red-500 hover:bg-red-50">🗑 Delete</button>
+                    </>
                   ) : (
-                    <button onClick={() => setReport({ id: post.id, type: 'post' })} className="w-full text-left px-4 py-2.5 text-[13px] text-[#666] hover:bg-[#f8f7f5] transition-colors">🚩 Report post</button>
+                    <>
+                      <button onClick={() => setReport({ id: post.id, type: 'post' })} className="w-full text-left px-4 py-2.5 text-[13px] text-[#666] hover:bg-[#f8f7f5]">🚩 Report</button>
+                      <button onClick={() => onBlock(post.user_id)} className="w-full text-left px-4 py-2.5 text-[13px] text-red-500 hover:bg-red-50">🚫 Block user</button>
+                    </>
                   )}
                 </div>
               )}
@@ -155,7 +144,6 @@ function PostCard({ post, userId, onLike, onDelete, onComment, onDeleteComment }
           <p className="text-[14px] text-[#111] leading-[1.7]">{post.content}</p>
         </div>
 
-        {/* Actions bar */}
         <div className="px-5 py-2.5 border-t border-[#f0ede8] flex items-center gap-5">
           <button onClick={() => onLike(post)}
             className={`flex items-center gap-1.5 text-[13px] transition-colors ${post.user_liked ? 'text-red-500' : 'text-[#999] hover:text-red-400'}`}>
@@ -165,27 +153,25 @@ function PostCard({ post, userId, onLike, onDelete, onComment, onDeleteComment }
           <button onClick={() => setShowComments(!showComments)}
             className="flex items-center gap-1.5 text-[13px] text-[#999] hover:text-[#666] transition-colors">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span>{post.comment_count > 0 ? post.comment_count : ''}</span>
-            <span>{showComments ? 'Hide' : 'Comment'}</span>
+            <span>{post.comment_count > 0 ? post.comment_count : ''} {showComments ? 'Hide' : 'Comment'}</span>
           </button>
         </div>
 
-        {/* Comments */}
         {showComments && (
           <div className="border-t border-[#f0ede8] bg-[#fafaf9]">
             {(post.comments || []).length > 0 && (
-              <div className="px-5 pt-3 pb-1 space-y-3">
+              <div className="px-5 pt-3 pb-1 space-y-2.5">
                 {(post.comments || []).map(c => (
                   <div key={c.id} className="flex gap-2.5">
                     <Avatar p={c.profiles} size={7}/>
                     <div className="flex-1 bg-white rounded-xl px-3 py-2 border border-[#e8e8e8]">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-[12px] font-semibold text-[#111]">{c.profiles?.full_name}</p>
+                        <p className="text-[12px] font-semibold">{c.profiles?.full_name}</p>
                         <div className="flex items-center gap-2">
                           <p className="text-[10px] text-[#999]">{timeAgo(c.created_at)}</p>
                           {c.user_id === userId
-                            ? <button onClick={() => onDeleteComment(c.id, post.id)} className="text-[#ccc] hover:text-red-400 text-[14px] leading-none transition-colors">×</button>
-                            : <button onClick={() => setReport({ id: c.id, type: 'comment' })} className="text-[#ccc] hover:text-red-400 text-[10px] transition-colors">🚩</button>
+                            ? <button onClick={() => onDeleteComment(c.id, post.id)} className="text-[#ccc] hover:text-red-400 text-[14px]">×</button>
+                            : <button onClick={() => setReport({ id: c.id, type: 'comment' })} className="text-[10px] text-[#ccc] hover:text-red-400">🚩</button>
                           }
                         </div>
                       </div>
@@ -195,14 +181,13 @@ function PostCard({ post, userId, onLike, onDelete, onComment, onDeleteComment }
                 ))}
               </div>
             )}
-            {/* Comment input */}
             <div className="px-5 py-3 flex gap-2">
               <input value={commentText} onChange={e => setCommentText(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleComment()}
                 placeholder="Add a comment..." maxLength={300}
                 className="flex-1 text-[13px] border border-[#e8e8e8] rounded-xl px-3.5 py-2 outline-none focus:border-[#111] bg-white"/>
               <button onClick={handleComment} disabled={!commentText.trim() || commenting}
-                className="px-3 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors">
+                className="px-3 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium disabled:opacity-40">
                 {commenting ? '...' : 'Post'}
               </button>
             </div>
@@ -213,7 +198,6 @@ function PostCard({ post, userId, onLike, onDelete, onComment, onDeleteComment }
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FeedPage() {
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
@@ -226,7 +210,10 @@ export default function FeedPage() {
   const [showCompose, setShowCompose] = useState(false)
   const [content, setContent] = useState('')
   const [postType, setPostType] = useState('general')
+  const [visibility, setVisibility] = useState<'public'|'friends'|'private'>('friends')
   const [selectedGoalId, setSelectedGoalId] = useState('')
+  const [feedFilter, setFeedFilter] = useState<'all'|'friends'|'public'>('all')
+  const [showArchived, setShowArchived] = useState(false)
   const [pullStart, setPullStart] = useState(0)
   const [pullDist, setPullDist] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -238,7 +225,7 @@ export default function FeedPage() {
       if (!user) return
       const [{ data: prof }, { data: gs }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('goals').select('id, title').eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: false }),
+        supabase.from('goals').select('id, title').eq('user_id', user.id).eq('is_active', true),
       ])
       setMyProfile(prof)
       setGoals(gs || [])
@@ -253,15 +240,52 @@ export default function FeedPage() {
   const loadFeed = useCallback(async (userId?: string) => {
     const uid = userId || user?.id
     if (!uid) return
+
+    // Get blocked users
+    const { data: blocks } = await supabase.from('blocked_users').select('blocked_id').eq('blocker_id', uid)
+    const blockedIds = new Set((blocks || []).map((b: any) => b.blocked_id))
+
+    // Get friends
     const { data: friendships } = await supabase.from('friendships').select('requester, addressee').or(`requester.eq.${uid},addressee.eq.${uid}`).eq('status', 'accepted')
-    const friendIds = (friendships || []).map((f: any) => f.requester === uid ? f.addressee : f.requester)
-    const viewableIds = [uid, ...friendIds]
+    const friendIds = (friendships || []).map((f: any) => f.requester === uid ? f.addressee : f.requester).filter((id: string) => !blockedIds.has(id))
 
-    const { data: feedPosts } = await supabase.from('feed_posts').select('*').in('user_id', viewableIds).order('created_at', { ascending: false }).limit(30)
-    if (!feedPosts?.length) { setPosts([]); return }
+    // Fetch my posts + friends posts + public posts
+    const { data: myPosts } = await supabase.from('feed_posts').select('*').eq('user_id', uid).eq('is_archived', false).order('created_at', { ascending: false }).limit(20)
+    const { data: friendPosts } = friendIds.length
+      ? await supabase.from('feed_posts').select('*').in('user_id', friendIds).in('visibility', ['friends', 'public']).eq('is_archived', false).order('created_at', { ascending: false }).limit(20)
+      : { data: [] }
+    const { data: publicPosts } = await supabase.from('feed_posts').select('*').eq('visibility', 'public').eq('is_archived', false).not('user_id', 'in', `(${[uid, ...friendIds].join(',')})`).order('created_at', { ascending: false }).limit(10)
 
-    const postIds = feedPosts.map((p: any) => p.id)
-    const uniqueUserIds = feedPosts.map((p: any) => p.user_id).filter((id: string, i: number, a: string[]) => a.indexOf(id) === i)
+    // Merge and deduplicate
+    const allPostsRaw = [...(myPosts || []), ...(friendPosts || []), ...(publicPosts || [])]
+    const seen = new Set<string>()
+    const allPosts = allPostsRaw.filter((p: any) => { if (seen.has(p.id)) return false; seen.add(p.id); return true })
+
+    if (!allPosts.length) { setPosts([]); return }
+
+    // Get my goals for relevance scoring
+    const { data: myGoals } = await supabase.from('goals').select('title, category').eq('user_id', uid).eq('is_active', true)
+    const myCategories = (myGoals || []).map((g: any) => g.category).filter(Boolean)
+
+    // Score posts for relevance
+    const now = Date.now()
+    const scoredPosts = allPosts.map((p: any) => {
+      let score = 0
+      const ageHours = (now - new Date(p.created_at).getTime()) / 3600000
+      score += Math.max(0, 100 - ageHours * 2) // recency
+      if (p.user_id === uid) score += 20 // own posts
+      if (friendIds.includes(p.user_id)) score += 15 // friends
+      if (['achievement', 'milestone', 'reward'].includes(p.post_type)) score += 10 // high-value types
+      if (p.goal_title && myGoals?.some((g: any) => g.title === p.goal_title)) score += 25 // same goal
+      return { ...p, relevance_score: score }
+    })
+
+    // Sort by relevance
+    scoredPosts.sort((a: any, b: any) => b.relevance_score - a.relevance_score)
+
+    // Fetch profiles for all unique users
+    const uniqueUserIds = scoredPosts.map((p: any) => p.user_id).filter((id: string, i: number, a: string[]) => a.indexOf(id) === i)
+    const postIds = scoredPosts.map((p: any) => p.id)
 
     const [{ data: profilesData }, { data: myLikes }, { data: allLikes }, { data: allComments }] = await Promise.all([
       supabase.from('profiles').select('id, full_name, avatar_url, plan').in('id', uniqueUserIds),
@@ -275,11 +299,11 @@ export default function FeedPage() {
     const likeCounts: Record<string, number> = {}
     ;(allLikes || []).forEach((l: any) => { likeCounts[l.post_id] = (likeCounts[l.post_id] || 0) + 1 })
 
-    // Get profiles for comment authors
+    // Add comment author profiles
     const commentAuthorIds = (allComments || []).map((c: any) => c.user_id).filter((id: string, i: number, a: string[]) => a.indexOf(id) === i && !profileMap[id])
     if (commentAuthorIds.length) {
-      const { data: extraProfiles } = await supabase.from('profiles').select('id, full_name, avatar_url, plan').in('id', commentAuthorIds)
-      ;(extraProfiles || []).forEach((p: any) => { profileMap[p.id] = p })
+      const { data: extras } = await supabase.from('profiles').select('id, full_name, avatar_url, plan').in('id', commentAuthorIds)
+      ;(extras || []).forEach((p: any) => { profileMap[p.id] = p })
     }
 
     const commentsByPost: Record<string, Comment[]> = {}
@@ -288,7 +312,7 @@ export default function FeedPage() {
       commentsByPost[c.post_id].push({ ...c, profiles: profileMap[c.user_id] })
     })
 
-    setPosts(feedPosts.map((p: any) => ({
+    setPosts(scoredPosts.map((p: any) => ({
       ...p,
       profiles: profileMap[p.user_id] || null,
       likes_count: likeCounts[p.id] || 0,
@@ -308,25 +332,17 @@ export default function FeedPage() {
   const submitPost = async () => {
     if (!content.trim() || posting) return
     setPosting(true)
-
-    // AI moderation
     const modRes = await fetch('/api/moderate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: content }) })
     const mod = await modRes.json()
     if (!mod.safe) { toast.error(`Post blocked: ${mod.reason || 'inappropriate content'}`); setPosting(false); return }
-
     const selectedGoal = goals.find(g => g.id === selectedGoalId)
     const { data: newPost, error } = await supabase.from('feed_posts').insert({
-      user_id: user.id,
-      content: content.trim(),
-      post_type: postType,
-      goal_title: selectedGoal?.title || null,
-      goal_id: selectedGoalId || null,
+      user_id: user.id, content: content.trim(), post_type: postType,
+      visibility, goal_title: selectedGoal?.title || null, goal_id: selectedGoalId || null,
     }).select('*').single()
-
     if (error) { toast.error(error.message); setPosting(false); return }
-    setPosts(prev => [{ ...newPost, profiles: myProfile, likes_count: 0, user_liked: false, comments: [], comment_count: 0 }, ...prev])
-    setContent('')
-    setShowCompose(false)
+    setPosts(prev => [{ ...newPost, profiles: myProfile, likes_count: 0, user_liked: false, comments: [], comment_count: 0, relevance_score: 999 }, ...prev])
+    setContent(''); setShowCompose(false)
     toast.success('Posted!')
     setPosting(false)
   }
@@ -349,50 +365,75 @@ export default function FeedPage() {
     toast.success('Deleted')
   }
 
+  const archivePost = async (postId: string, archive: boolean) => {
+    await supabase.from('feed_posts').update({ is_archived: archive }).eq('id', postId).eq('user_id', user.id)
+    if (!showArchived) setPosts(prev => prev.filter(p => p.id !== postId))
+    else setPosts(prev => prev.map(p => p.id === postId ? { ...p, is_archived: archive } : p))
+    toast.success(archive ? 'Archived' : 'Unarchived')
+  }
+
+  const blockUser = async (blockedId: string) => {
+    if (!confirm('Block this user? Their posts will be hidden from your feed.')) return
+    await supabase.from('blocked_users').insert({ blocker_id: user.id, blocked_id: blockedId })
+    setPosts(prev => prev.filter(p => p.user_id !== blockedId))
+    toast.success('User blocked')
+  }
+
   const addComment = async (postId: string, text: string) => {
-    // AI moderation
     const modRes = await fetch('/api/moderate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
     const mod = await modRes.json()
-    if (!mod.safe) { toast.error(`Comment blocked: ${mod.reason || 'inappropriate content'}`); return }
-
+    if (!mod.safe) { toast.error(`Comment blocked: ${mod.reason}`); return }
     const { data: comment, error } = await supabase.from('post_comments').insert({ post_id: postId, user_id: user.id, content: text }).select('*').single()
     if (error) { toast.error(error.message); return }
-    const newComment = { ...comment, profiles: myProfile }
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), newComment], comment_count: p.comment_count + 1 } : p))
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), { ...comment, profiles: myProfile }], comment_count: p.comment_count + 1 } : p))
   }
 
   const deleteComment = async (commentId: string, postId: string) => {
     await supabase.from('post_comments').delete().eq('id', commentId).eq('user_id', user.id)
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: (p.comments || []).filter(c => c.id !== commentId), comment_count: Math.max(0, p.comment_count - 1) } : p))
-    toast.success('Comment deleted')
   }
 
-  // Pull to refresh
   const onTouchStart = (e: React.TouchEvent) => setPullStart(e.touches[0].clientY)
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (scrollRef.current && scrollRef.current.scrollTop > 0) return
-    setPullDist(Math.max(0, Math.min(80, e.touches[0].clientY - pullStart)))
-  }
+  const onTouchMove = (e: React.TouchEvent) => { if (scrollRef.current?.scrollTop === 0) setPullDist(Math.max(0, Math.min(80, e.touches[0].clientY - pullStart))) }
   const onTouchEnd = async () => { if (pullDist > 60) await refresh(); setPullDist(0) }
+
+  const filteredPosts = posts.filter(p => {
+    if (!showArchived && p.is_archived) return false
+    if (feedFilter === 'friends' && p.user_id !== user?.id && p.visibility === 'public' && posts.some(pp => pp.user_id === p.user_id && pp.user_id !== user?.id)) return p.profiles !== undefined
+    if (feedFilter === 'public') return p.visibility === 'public'
+    return true
+  })
 
   return (
     <div className="fade-up max-w-[680px]">
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="font-serif text-[32px] mb-0.5">Feed</h1>
-          <p className="text-[14px] text-[#666]">Friends only · {posts.length} posts</p>
+          <p className="text-[13px] text-[#999]">{posts.length} posts · ranked by relevance</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={refresh} disabled={refreshing}
-            className="flex items-center gap-1.5 px-3.5 py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#666] hover:bg-[#f8f7f5] transition-colors disabled:opacity-50">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? 'spin-anim' : ''}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <button onClick={refresh} disabled={refreshing} className="flex items-center gap-1.5 px-3.5 py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#666] hover:bg-[#f8f7f5] transition-colors disabled:opacity-50">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? 'spin-anim' : ''}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             Refresh
           </button>
-          <button onClick={() => setShowCompose(!showCompose)}
-            className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">
+          <button onClick={() => setShowCompose(!showCompose)} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">
             + Post
           </button>
         </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {([['all', '✦ For you'], ['friends', '👥 Friends'], ['public', '🌍 Public']] as const).map(([val, label]) => (
+          <button key={val} onClick={() => setFeedFilter(val)}
+            className={`px-3.5 py-1.5 rounded-full text-[12px] font-medium border transition-all ${feedFilter === val ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
+            {label}
+          </button>
+        ))}
+        <button onClick={() => setShowArchived(!showArchived)}
+          className={`px-3.5 py-1.5 rounded-full text-[12px] font-medium border transition-all ${showArchived ? 'bg-[#b8922a] text-white border-[#b8922a]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
+          📦 Archived
+        </button>
       </div>
 
       {pullDist > 10 && (
@@ -403,12 +444,11 @@ export default function FeedPage() {
 
       {/* Compose */}
       {showCompose && (
-        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-5 shadow-sm">
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4 shadow-sm">
           <div className="flex gap-3">
             <Avatar p={myProfile}/>
             <div className="flex-1">
-              {/* Type selector */}
-              <div className="flex gap-1.5 mb-3 flex-wrap">
+              <div className="flex gap-1.5 mb-2 flex-wrap">
                 {POST_TYPES.map(t => (
                   <button key={t.v} onClick={() => setPostType(t.v)}
                     className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${postType === t.v ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
@@ -416,16 +456,24 @@ export default function FeedPage() {
                   </button>
                 ))}
               </div>
-              {/* Goal tag */}
+              {/* Visibility selector */}
+              <div className="flex gap-2 mb-2">
+                {(['friends', 'public', 'private'] as const).map(v => (
+                  <button key={v} onClick={() => setVisibility(v)}
+                    className={`px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all ${visibility === v ? 'bg-[#b8922a] text-white border-[#b8922a]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
+                    {v === 'public' ? '🌍 Public' : v === 'private' ? '🔒 Only me' : '👥 Friends'}
+                  </button>
+                ))}
+              </div>
               {goals.length > 0 && (
                 <select value={selectedGoalId} onChange={e => setSelectedGoalId(e.target.value)}
-                  className="w-full text-[12px] border border-[#e8e8e8] rounded-xl px-3 py-2 outline-none focus:border-[#111] mb-3 text-[#666]">
+                  className="w-full text-[12px] border border-[#e8e8e8] rounded-xl px-3 py-2 outline-none focus:border-[#111] mb-2 text-[#666]">
                   <option value="">🎯 Tag a goal (optional)</option>
                   {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
                 </select>
               )}
               <textarea value={content} onChange={e => setContent(e.target.value)}
-                placeholder="Share your progress, how you're feeling, or an update with your friends..."
+                placeholder="Share your progress, how you're feeling, or a win..."
                 className="w-full text-[14px] border border-[#e8e8e8] rounded-xl px-3.5 py-3 outline-none focus:border-[#111] resize-none leading-[1.6]"
                 rows={3} maxLength={500}/>
               <div className="flex items-center justify-between mt-2">
@@ -443,7 +491,7 @@ export default function FeedPage() {
         </div>
       )}
 
-      {/* Feed list */}
+      {/* Feed */}
       <div ref={scrollRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
         {loading ? (
           <div className="space-y-3">
@@ -454,19 +502,19 @@ export default function FeedPage() {
               </div>
             ))}
           </div>
-        ) : posts.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-[48px] mb-4">🌱</div>
-            <p className="text-[16px] font-medium text-[#111] mb-2">Nothing yet</p>
-            <p className="text-[14px] text-[#666] mb-6">Add friends and share your journey</p>
-            <button onClick={() => setShowCompose(true)} className="px-5 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium">Make your first post</button>
+        ) : filteredPosts.length === 0 ? (
+          <div className="text-center py-14">
+            <div className="text-[48px] mb-3">🌱</div>
+            <p className="text-[15px] font-medium mb-2">Nothing here yet</p>
+            <p className="text-[13px] text-[#666] mb-5">Add friends or make your first post</p>
+            <button onClick={() => setShowCompose(true)} className="px-5 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium">Make a post</button>
           </div>
         ) : (
           <div className="space-y-3">
-            {posts.map(post => (
+            {filteredPosts.map(post => (
               <PostCard key={post.id} post={post} userId={user?.id}
-                onLike={toggleLike} onDelete={deletePost}
-                onComment={addComment} onDeleteComment={deleteComment}/>
+                onLike={toggleLike} onDelete={deletePost} onArchive={archivePost}
+                onComment={addComment} onDeleteComment={deleteComment} onBlock={blockUser}/>
             ))}
           </div>
         )}

@@ -60,24 +60,7 @@ export default function DiscoverCirclesPage() {
         </button>
       </div>
 
-      {/* Popular goals */}
-      {recommendations.length > 0 && (
-        <div className="mb-6">
-          <p className="font-medium text-[14px] mb-3">Popular goals people are tracking</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {recommendations.map((r: any) => (
-              <div key={r.id} className="bg-white border border-[#e8e8e8] rounded-2xl p-4 hover:border-[#d0d0d0] transition-all">
-                <p className="text-[13px] font-medium mb-1">{r.title}</p>
-                <p className="text-[11px] text-[#999] mb-2 leading-[1.5]">{r.description}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full">{r.category}</span>
-                  <span className="text-[10px] text-[#999]">{(r.popularity || 0).toLocaleString()} tracking</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Category filter */}
       <div className="flex gap-2 mb-5 flex-wrap">

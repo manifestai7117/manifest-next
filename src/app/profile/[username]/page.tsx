@@ -17,6 +17,7 @@ export default async function PublicProfilePage({ params }: { params: { username
     supabase.from('goals').select('title, streak, progress, category').eq('user_id', profile.id).eq('is_active', true).order('streak', { ascending: false }),
     supabase.from('rewards').select('*').eq('user_id', profile.id).order('earned_at', { ascending: false }),
     supabase.from('checkins').select('*', { count: 'exact', head: true }).eq('user_id', profile.id),
+    supabase.from('feed_posts').select('*', { count: 'exact', head: true }).eq('user_id', profile.id).eq('visibility', 'public'),
   ])
 
   const totalStreak = (goals || []).reduce((a: number, g: any) => a + (g.streak || 0), 0)
@@ -38,7 +39,7 @@ export default async function PublicProfilePage({ params }: { params: { username
             </div>
             <h1 className="font-serif text-[28px] mb-0.5">{profile.full_name}</h1>
             <p className="text-[13px] text-[#999] capitalize mb-4">{profile.plan === 'pro_trial' ? 'Pro Trial' : profile.plan} member</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               {[
                 { val: (goals||[]).length, label: 'Active goals' },
                 { val: `${totalStreak}🔥`, label: 'Streak days' },

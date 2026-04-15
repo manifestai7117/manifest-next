@@ -24,6 +24,7 @@ export default function AnalyticsPage() {
   const [selectedGoalId, setSelectedGoalId] = useState('')
   const [checkins, setCheckins] = useState<any[]>([])
   const [insight, setInsight] = useState('')
+  const [postCount, setPostCount] = useState(0)
   const [insightLoading, setInsightLoading] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -42,7 +43,14 @@ export default function AnalyticsPage() {
   }, [])
 
   const loadCheckins = async (goalId: string) => {
-    const { data } = await supabase.from('checkins').select('created_at, mood, note').eq('goal_id', goalId).order('created_at', { ascending: true }).limit(90)
+    const [{ data }, { data: { user: u } }] = await Promise.all([
+      supabase.from('checkins').select('created_at, mood, note').eq('goal_id', goalId).order('created_at', { ascending: true }).limit(90),
+      supabase.auth.getUser(),
+    ])
+    if (u) {
+      const { count: pc } = await supabase.from('feed_posts').select('*', { count: 'exact', head: true }).eq('user_id', u.id)
+      setPostCount(pc || 0)
+    }
     setCheckins(data || [])
   }
 
@@ -103,12 +111,13 @@ export default function AnalyticsPage() {
       )}
 
       {/* Key metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
         {[
           { val: `${goal.streak}`, label: 'Current streak 🔥' },
           { val: `${completionRate}%`, label: '28-day rate' },
           { val: avgMood, label: 'Avg mood (/5)' },
           { val: checkins.length, label: 'Total check-ins' },
+          { val: postCount, label: 'Posts shared' },
         ].map(({ val, label }) => (
           <div key={label} className="bg-white border border-[#e8e8e8] rounded-2xl p-4">
             <p className="font-serif text-[26px] leading-none mb-1">{val}</p>

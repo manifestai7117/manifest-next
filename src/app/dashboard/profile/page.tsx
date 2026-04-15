@@ -1,290 +1,247 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
 import Link from 'next/link'
-
-const REWARD_BADGES = [
-  { type:'first_checkin',  emoji:'🌱', title:'First Step',     color:'#22c55e' },
-  { type:'streak_7',       emoji:'🔥', title:'Week Warrior',   color:'#f97316' },
-  { type:'streak_14',      emoji:'⚡', title:'Fortnight Fire', color:'#eab308' },
-  { type:'streak_30',      emoji:'🏆', title:'Month Legend',   color:'#b8922a' },
-  { type:'phase_complete', emoji:'⭐', title:'Phase Done',     color:'#6366f1' },
-  { type:'goal_complete',  emoji:'🎯', title:'Goal Achieved',  color:'#b8922a' },
-]
 
 export default function ProfilePage() {
   const supabase = createClient()
   const router = useRouter()
-  const [profile, setProfile] = useState<any>(null)
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [activeGoals, setActiveGoals] = useState<any[]>([])
+  const [pausedGoals, setPausedGoals] = useState<any[]>([])
+  const [completedGoals, setCompletedGoals] = useState<any[]>([])
   const [rewards, setRewards] = useState<any[]>([])
-  const [friendCount, setFriendCount] = useState(0)
-  const [pendingRequests, setPendingRequests] = useState(0)
-  const [goalCount, setGoalCount] = useState(0)
-  const [completedCount, setCompletedCount] = useState(0)
-  const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [form, setForm] = useState({ full_name: '' })
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  // Delete account state
-  const [showDelete, setShowDelete] = useState(false)
-  const [confirmText, setConfirmText] = useState('')
-  const [deleting, setDeleting] = useState(false)
+  const [postCount, setPostCount] = useState(0)
+  const [totalCheckins, setTotalCheckins] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [resuming, setResuming] = useState<string | null>(null)
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       setUser(user)
-      const [profRes, rewardsRes, friendsRes, reqRes, goalsRes, doneRes] = await Promise.all([
+
+      const [
+        { data: prof },
+        { data: active },
+        { data: paused },
+        { data: completed },
+        { data: rwds },
+        { count: posts },
+        { count: checkins },
+      ] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('goals').select('*').eq('user_id', user.id).eq('is_active', true).eq('is_paused', false).order('created_at', { ascending: false }),
+        supabase.from('goals').select('*').eq('user_id', user.id).eq('is_active', true).eq('is_paused', true).order('paused_at', { ascending: false }),
+        supabase.from('goals').select('title, completed_at, success_note').eq('user_id', user.id).eq('is_active', false).not('completed_at', 'is', null).order('completed_at', { ascending: false }),
         supabase.from('rewards').select('*').eq('user_id', user.id).order('earned_at', { ascending: false }),
-        supabase.from('friendships').select('id', { count: 'exact', head: true }).or(`requester.eq.${user.id},addressee.eq.${user.id}`).eq('status', 'accepted'),
-        supabase.from('friendships').select('id', { count: 'exact', head: true }).eq('addressee', user.id).eq('status', 'pending'),
-        supabase.from('goals').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_active', true),
-        supabase.from('goals').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_active', false),
+        supabase.from('feed_posts').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('checkins').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
       ])
-      setProfile(profRes.data)
-      setForm({ full_name: profRes.data?.full_name || '' })
-      setRewards(rewardsRes.data || [])
-      setFriendCount(friendsRes.count || 0)
-      setPendingRequests(reqRes.count || 0)
-      setGoalCount(goalsRes.count || 0)
-      setCompletedCount(doneRes.count || 0)
+
+      setProfile(prof)
+      setActiveGoals(active || [])
+      setPausedGoals(paused || [])
+      setCompletedGoals(completed || [])
+      setRewards(rwds || [])
+      setPostCount(posts || 0)
+      setTotalCheckins(checkins || 0)
+      setLoading(false)
     }
     load()
   }, [])
 
-  const uploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !user) return
-    if (file.size > 5 * 1024 * 1024) { toast.error('Photo must be under 5MB'); return }
-    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return }
-    setUploading(true)
-    try {
-      const ext = file.name.split('.').pop() || 'jpg'
-      const path = `${user.id}.${ext}`
-      const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type })
-      if (upErr) { toast.error('Upload failed: ' + upErr.message); setUploading(false); return }
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-      const url = publicUrl + '?t=' + Date.now()
-      const { error: updateErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id)
-      if (updateErr) { toast.error('Failed to save photo: ' + updateErr.message); setUploading(false); return }
-      setProfile((p: any) => ({ ...p, avatar_url: url }))
-      toast.success('Profile photo updated!')
-      router.refresh()
-    } catch (e: any) {
-      toast.error('Upload error: ' + e.message)
-    }
-    setUploading(false)
+  const resumeGoal = async (goalId: string) => {
+    setResuming(goalId)
+    await supabase.from('goals').update({ is_paused: false, paused_at: null, pause_reason: null }).eq('id', goalId)
+    setPausedGoals(prev => prev.filter(g => g.id !== goalId))
+    const resumed = pausedGoals.find(g => g.id === goalId)
+    if (resumed) setActiveGoals(prev => [{ ...resumed, is_paused: false }, ...prev])
+    toast.success('Goal resumed!')
+    setResuming(null)
   }
 
-  const saveProfile = async () => {
-    if (!form.full_name.trim()) { toast.error('Name required'); return }
-    setSaving(true)
-    const { error } = await supabase.from('profiles').update({ full_name: form.full_name }).eq('id', user.id)
-    if (error) { toast.error('Save failed: ' + error.message); setSaving(false); return }
-    setProfile((p: any) => ({ ...p, full_name: form.full_name }))
-    toast.success('Profile saved ✓')
-    setSaving(false)
-    router.refresh()
+  const deleteGoal = async (goalId: string) => {
+    if (!confirm('Delete this paused goal permanently?')) return
+    await supabase.from('goals').delete().eq('id', goalId)
+    setPausedGoals(prev => prev.filter(g => g.id !== goalId))
+    toast.success('Goal deleted')
   }
 
-  const handleDeleteAccount = async () => {
-    if (confirmText !== 'DELETE') { toast.error('Type DELETE to confirm'); return }
-    setDeleting(true)
-    try {
-      const res = await fetch('/api/account/delete', { method: 'DELETE' })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to delete account')
-      }
-      toast.success('Account deleted. Goodbye.')
-      router.push('/')
-      router.refresh()
-    } catch (e: any) {
-      toast.error(e.message)
-      setDeleting(false)
-    }
+  const deleteAccount = async () => {
+    toast.error('Please contact support to delete your account.')
+    setShowDeleteAccount(false)
   }
 
+  if (loading) return <div className="text-[#999] text-[14px]">Loading...</div>
+
+  const totalStreak = activeGoals.reduce((a, g) => a + (g.streak || 0), 0)
+  const bestStreak = [...activeGoals, ...completedGoals].reduce((a, g) => Math.max(a, g.longest_streak || g.streak || 0), 0)
   const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
-  const trialExpiry = profile?.plan_expires_at ? new Date(profile.plan_expires_at) : null
-  const daysLeft = trialExpiry ? Math.max(0, Math.ceil((trialExpiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : null
-  const totalScore = rewards.reduce((acc, r) => acc + (r.type === 'goal_complete' ? 200 : r.type === 'phase_complete' ? 50 : r.type?.includes('streak') ? 30 : 10), 0)
-
-  if (!profile) return <div className="text-[#999] text-[14px]">Loading...</div>
 
   return (
-    <div className="fade-up max-w-[700px]">
-      <h1 className="font-serif text-[32px] mb-1">My Profile</h1>
-      <p className="text-[14px] text-[#666] mb-8">Your account, achievements, and settings</p>
+    <div className="fade-up max-w-[720px]">
+      {/* Profile header */}
+      <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden mb-4">
+        <div className="bg-[#111] h-20"/>
+        <div className="px-6 pb-6">
+          <div className="-mt-10 mb-4 flex items-end justify-between">
+            {profile?.avatar_url
+              ? <img src={profile.avatar_url} alt="" className="w-20 h-20 rounded-2xl border-4 border-white object-cover"/>
+              : <div className="w-20 h-20 rounded-2xl border-4 border-white bg-[#b8922a] flex items-center justify-center text-white text-[32px] font-semibold">{profile?.full_name?.[0]}</div>
+            }
+            <div className="flex gap-2 pb-1">
+              {isPro && <span className="text-[11px] font-semibold bg-[#b8922a] text-white px-2.5 py-1 rounded-full">PRO</span>}
+              <Link href="/dashboard/settings" className="text-[12px] px-3 py-1.5 border border-[#e8e8e8] rounded-xl hover:bg-[#f8f7f5] transition-colors">⚙ Settings</Link>
+            </div>
+          </div>
+          <h1 className="font-serif text-[24px] mb-0.5">{profile?.full_name}</h1>
+          <p className="text-[13px] text-[#999] mb-4">{user?.email}</p>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        {[
-          { val: friendCount, label: 'Friends', link: '/dashboard/friends' },
-          { val: pendingRequests, label: 'Requests', link: '/dashboard/friends' },
-          { val: goalCount, label: 'Active goals', link: '/dashboard/goals' },
-          { val: completedCount, label: 'Completed', link: '/dashboard/goals' },
-        ].map(s => (
-          <Link key={s.label} href={s.link} className="bg-white border border-[#e8e8e8] rounded-2xl p-4 text-center hover:border-[#d0d0d0] transition-colors">
-            <p className="font-serif text-[28px] leading-none mb-1">{s.val}</p>
-            <p className="text-[11px] font-medium text-[#999] uppercase tracking-[.05em]">{s.label}</p>
-          </Link>
-        ))}
+          {/* Stats row */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { val: activeGoals.length, label: 'Active goals' },
+              { val: completedGoals.length, label: 'Completed' },
+              { val: `${totalStreak}🔥`, label: 'Total streak' },
+              { val: postCount, label: 'Posts' },
+              { val: totalCheckins, label: 'Check-ins' },
+            ].map(({ val, label }) => (
+              <div key={label} className="bg-[#f8f7f5] rounded-xl p-3 text-center">
+                <p className="font-serif text-[20px] leading-none mb-0.5">{val}</p>
+                <p className="text-[10px] text-[#999] uppercase tracking-[.05em]">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Photo + name */}
-      <div className="bg-white border border-[#e8e8e8] rounded-2xl p-6 mb-4">
-        <p className="text-[12px] font-medium text-[#666] uppercase tracking-[.08em] mb-4">Profile photo</p>
-        <div className="flex items-center gap-5 mb-5">
-          <div className="relative">
-            {profile.avatar_url ? (
-              <img src={profile.avatar_url} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-[#e8e8e8]" />
-            ) : (
-              <div className="w-20 h-20 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[28px] font-semibold">
-                {profile.full_name?.[0]?.toUpperCase() || '?'}
-              </div>
-            )}
-            {rewards.length > 0 && (
-              <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full border-2 border-white flex items-center justify-center text-[14px]">
-                {rewards[0]?.emoji || '🏅'}
-              </div>
-            )}
-            {uploading && (
-              <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center">
-                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full spin-anim" />
-              </div>
-            )}
+      {/* Active goals summary */}
+      {activeGoals.length > 0 && (
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-medium text-[14px]">Active goals <span className="text-[#999] font-normal">({activeGoals.length})</span></p>
+            <Link href="/onboarding" className="text-[12px] text-[#b8922a] hover:underline">+ Add goal</Link>
           </div>
-          <div>
-            <button onClick={() => fileRef.current?.click()} disabled={uploading}
-              className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors disabled:opacity-50 block mb-2">
-              {uploading ? 'Uploading...' : 'Upload photo'}
-            </button>
-            <p className="text-[11px] text-[#999]">JPG, PNG or WebP · Max 5MB</p>
-            <input ref={fileRef} type="file" accept="image/*" onChange={uploadPhoto} className="hidden" />
-          </div>
-        </div>
-        <div className="mb-4">
-          <label className="block text-[12px] font-medium text-[#666] mb-2">Full name</label>
-          <input className="w-full px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111] transition-colors"
-            value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
-        </div>
-        <div className="mb-5">
-          <label className="block text-[12px] font-medium text-[#666] mb-2">Email</label>
-          <input className="w-full px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] bg-[#f8f7f5] text-[#999]"
-            value={user?.email || ''} readOnly />
-        </div>
-        <button onClick={saveProfile} disabled={saving}
-          className="px-5 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50 transition-colors">
-          {saving ? 'Saving...' : 'Save changes'}
-        </button>
-      </div>
-
-      {/* Achievements */}
-      <div className="bg-white border border-[#e8e8e8] rounded-2xl p-6 mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-[12px] font-medium text-[#666] uppercase tracking-[.08em]">Achievements</p>
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-[#b8922a]">{totalScore} pts</span>
-            <span className="text-[11px] text-[#999]">total score</span>
-          </div>
-        </div>
-        {rewards.length === 0 ? (
-          <p className="text-[13px] text-[#999]">Complete check-ins and phases to earn badges</p>
-        ) : (
-          <div className="flex gap-3 flex-wrap">
-            {rewards.slice(0, 12).map((r, i) => {
-              const badge = REWARD_BADGES.find(b => b.type === r.type) || { emoji: r.emoji || '🏅', title: r.title, color: '#b8922a' }
-              return (
-                <div key={i} title={r.description || r.title} className="flex flex-col items-center gap-1 cursor-help">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-[22px]"
-                    style={{ background: `${badge.color}15`, border: `2px solid ${badge.color}30` }}>
-                    {badge.emoji}
+          <div className="space-y-3">
+            {activeGoals.map(g => (
+              <div key={g.id} className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[13px] font-medium truncate">{g.title}</p>
+                    <span className="text-[11px] text-[#b8922a] font-medium flex-shrink-0 ml-2">{g.streak}🔥</span>
                   </div>
-                  <p className="text-[9px] text-[#999] text-center max-w-[48px] leading-tight">{badge.title}</p>
+                  <div className="h-1.5 bg-[#f0ede8] rounded-full overflow-hidden">
+                    <div className="h-full bg-[#b8922a] rounded-full" style={{ width: `${g.progress || 0}%` }}/>
+                  </div>
+                  <p className="text-[10px] text-[#999] mt-0.5">{g.progress || 0}% · {g.timeline}</p>
                 </div>
-              )
-            })}
+                <Link href="/dashboard/goal" className="flex-shrink-0 text-[11px] px-3 py-1.5 border border-[#e8e8e8] rounded-lg hover:bg-[#f8f7f5] transition-colors">View</Link>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
-
-      {/* Plan */}
-      <div className="bg-white border border-[#e8e8e8] rounded-2xl p-6 mb-4">
-        <p className="text-[12px] font-medium text-[#666] uppercase tracking-[.08em] mb-4">Plan</p>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="font-medium text-[15px] capitalize">{profile.plan === 'pro_trial' ? 'Pro (Free Trial)' : profile.plan}</p>
-            {isPro && daysLeft !== null && <p className="text-[12px] text-[#b8922a]">{daysLeft} days left in trial</p>}
-            {!isPro && <p className="text-[12px] text-[#999]">5 chats/day · 2 goals</p>}
-            {isPro && <p className="text-[12px] text-[#999]">15 chats/day · 5 goals · all features</p>}
-          </div>
-          {!isPro && (
-            <Link href="/dashboard/upgrade" className="px-4 py-2 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium hover:bg-[#9a7820] transition-colors">
-              Upgrade free →
-            </Link>
-          )}
         </div>
-        {isPro && daysLeft !== null && daysLeft <= 14 && (
-          <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-xl p-3 text-[13px] text-[#b8922a]">
-            Trial ends in {daysLeft} days. After that: $9/month.
+      )}
+
+      {/* Paused goals */}
+      {pausedGoals.length > 0 && (
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
+          <p className="font-medium text-[14px] mb-3">Paused goals <span className="text-[#999] font-normal">({pausedGoals.length})</span></p>
+          <div className="space-y-3">
+            {pausedGoals.map(g => (
+              <div key={g.id} className="flex items-center gap-3 p-3 bg-[#f8f7f5] rounded-xl">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium">{g.title}</p>
+                  <p className="text-[11px] text-[#999] mt-0.5">
+                    Paused {g.paused_at ? new Date(g.paused_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}{g.pause_reason ? ` · ${g.pause_reason}` : ''}
+                  </p>
+                  <p className="text-[11px] text-[#b8922a] mt-0.5">{g.streak} day streak saved</p>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button onClick={() => resumeGoal(g.id)} disabled={resuming === g.id}
+                    className="text-[11px] px-3 py-1.5 bg-[#111] text-white rounded-lg hover:bg-[#2a2a2a] transition-colors disabled:opacity-50">
+                    {resuming === g.id ? '...' : 'Resume'}
+                  </button>
+                  <button onClick={() => deleteGoal(g.id)}
+                    className="text-[11px] px-3 py-1.5 border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Completed goals */}
+      {completedGoals.length > 0 && (
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
+          <p className="font-medium text-[14px] mb-3">Completed goals 🎯 <span className="text-[#999] font-normal">({completedGoals.length})</span></p>
+          <div className="space-y-2">
+            {completedGoals.map((g: any) => (
+              <div key={g.title} className="p-3 bg-green-50 border border-green-100 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-medium text-green-800">{g.title}</p>
+                  <span className="text-[10px] text-green-600 font-medium">
+                    {g.completed_at ? new Date(g.completed_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Completed'}
+                  </span>
+                </div>
+                {g.success_note && <p className="text-[12px] text-green-700 mt-1 italic">"{g.success_note}"</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Rewards */}
+      {rewards.length > 0 && (
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
+          <p className="font-medium text-[14px] mb-3">Badges earned <span className="text-[#999] font-normal">({rewards.length})</span></p>
+          <div className="flex flex-wrap gap-2">
+            {rewards.map((r: any) => (
+              <div key={r.id} className="flex items-center gap-2 bg-[#faf3e0] border border-[#b8922a]/20 rounded-xl px-3 py-2" title={r.description}>
+                <span className="text-[20px]">{r.emoji}</span>
+                <div>
+                  <p className="text-[12px] font-medium text-[#111]">{r.title}</p>
+                  <p className="text-[10px] text-[#999]">{r.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Public profile link */}
+      <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
+        <p className="font-medium text-[14px] mb-1">Your public profile</p>
+        <p className="text-[12px] text-[#999] mb-3">Share your goal journey with others</p>
+        <div className="flex gap-2">
+          <input readOnly value={`${typeof window !== 'undefined' ? window.location.origin : 'https://manifest-next.vercel.app'}/profile/${user?.id}`}
+            className="flex-1 text-[12px] text-[#666] bg-[#f8f7f5] border border-[#e8e8e8] rounded-xl px-3 py-2 outline-none"/>
+          <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/profile/${user?.id}`); toast.success('Link copied!') }}
+            className="px-4 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium">Copy</button>
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5">
+        <p className="font-medium text-[14px] mb-3 text-red-500">Danger zone</p>
+        <button onClick={() => setShowDeleteAccount(true)}
+          className="px-4 py-2 border border-red-200 text-red-500 rounded-xl text-[13px] hover:bg-red-50 transition-colors">
+          Delete account
+        </button>
+        {showDeleteAccount && (
+          <div className="mt-3 p-4 bg-red-50 border border-red-100 rounded-xl">
+            <p className="text-[13px] text-red-700 mb-2">This will permanently delete all your data. Contact support at <a href="mailto:support@manifest-next.vercel.app" className="underline">support@manifest-next.vercel.app</a> to proceed.</p>
+            <button onClick={() => setShowDeleteAccount(false)} className="text-[12px] text-[#666] hover:underline">Cancel</button>
           </div>
         )}
       </div>
-
-      {/* Delete account */}
-      <div className="bg-white border border-red-100 rounded-2xl p-6">
-        <p className="text-[12px] font-medium text-[#666] uppercase tracking-[.08em] mb-4">Danger zone</p>
-        {!showDelete ? (
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="font-medium text-[14px] text-red-600 mb-1">Delete account</p>
-              <p className="text-[12px] text-[#999]">Permanently deletes your account, all goals, art, messages, and data. Cannot be undone.</p>
-            </div>
-            <button onClick={() => setShowDelete(true)}
-              className="px-4 py-2 border border-red-200 text-red-600 rounded-xl text-[13px] font-medium hover:bg-red-50 transition-colors flex-shrink-0">
-              Delete account
-            </button>
-          </div>
-        ) : (
-          <div>
-            <p className="font-medium text-[14px] text-red-600 mb-2">Are you absolutely sure?</p>
-            <p className="text-[13px] text-[#666] mb-4 leading-[1.6]">
-              This will permanently delete your profile, all goals, vision art, check-ins, coach messages, circle memberships, friends, and direct messages.{' '}
-              <strong>This cannot be undone.</strong>
-            </p>
-            <div className="mb-4">
-              <label className="block text-[12px] font-medium text-[#666] mb-2">
-                Type <strong className="text-red-600">DELETE</strong> to confirm
-              </label>
-              <input
-                className="w-full px-3.5 py-2.5 border border-red-200 rounded-xl text-[14px] outline-none focus:border-red-500 transition-colors"
-                value={confirmText}
-                onChange={e => setConfirmText(e.target.value)}
-                placeholder="DELETE"
-              />
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => { setShowDelete(false); setConfirmText('') }}
-                className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] hover:bg-[#f8f7f5] transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleDeleteAccount}
-                disabled={deleting || confirmText !== 'DELETE'}
-                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-[13px] font-medium hover:bg-red-700 transition-colors disabled:opacity-40">
-                {deleting ? 'Deleting everything...' : 'Yes, delete my account'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
     </div>
   )
 }

@@ -110,6 +110,11 @@ export default function GoalPage() {
   const [successNote, setSuccessNote] = useState('')
   const [form, setForm] = useState({ title: '', timeline: '', why: '' })
   const [loading, setLoading] = useState(true)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showPauseModal, setShowPauseModal] = useState(false)
+  const [pausing, setPausing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [pauseReason, setPauseReason] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -131,6 +136,29 @@ export default function GoalPage() {
     setForm({ title: g.title, timeline: g.timeline, why: g.why })
     setEditing(false)
     if (typeof window !== 'undefined') localStorage.setItem('selectedGoalId', g.id)
+  }
+
+  const pauseGoal = async () => {
+    if (!goal || pausing) return
+    setPausing(true)
+    await supabase.from('goals').update({ is_paused: true, paused_at: new Date().toISOString(), pause_reason: pauseReason }).eq('id', goal.id)
+    setGoals(prev => prev.filter(g => g.id !== goal.id))
+    setShowPauseModal(false)
+    setPausing(false)
+    toast.success('Goal paused. You can resume it from your profile.')
+    router.push('/dashboard')
+  }
+
+  const deleteGoal = async () => {
+    if (!goal || deleting) return
+    setDeleting(true)
+    await supabase.from('goals').delete().eq('id', goal.id)
+    setGoals(prev => prev.filter(g => g.id !== goal.id))
+    setShowDeleteModal(false)
+    setDeleting(false)
+    localStorage.removeItem('selectedGoalId')
+    toast.success('Goal deleted.')
+    router.push('/dashboard')
   }
 
   const saveChanges = async () => {
@@ -205,6 +233,49 @@ export default function GoalPage() {
 
   return (
     <div className="fade-up max-w-[800px]">
+      {/* Pause Modal */}
+      {showPauseModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl max-w-[420px] w-full p-7 shadow-2xl">
+            <div className="text-center mb-5">
+              <div className="text-[40px] mb-2">⏸</div>
+              <h2 className="font-serif text-[22px] mb-1">Pause this goal?</h2>
+              <p className="text-[13px] text-[#666]">Your streak and progress are saved. You can resume anytime from your profile.</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-[12px] font-medium text-[#666] mb-1.5">Why are you pausing? <span className="text-[#999]">(optional)</span></label>
+              <input value={pauseReason} onChange={e => setPauseReason(e.target.value)} placeholder="Vacation, busy period, need a break..."
+                className="w-full px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111]"/>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowPauseModal(false)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
+              <button onClick={pauseGoal} disabled={pausing} className="flex-1 py-2.5 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium disabled:opacity-50">
+                {pausing ? 'Pausing...' : 'Pause goal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl max-w-[420px] w-full p-7 shadow-2xl">
+            <div className="text-center mb-5">
+              <div className="text-[40px] mb-2">🗑</div>
+              <h2 className="font-serif text-[22px] mb-1">Delete this goal?</h2>
+              <p className="text-[13px] text-[#666]">This permanently deletes <strong>{goal?.title}</strong> and all check-ins. This cannot be undone.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteModal(false)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
+              <button onClick={deleteGoal} disabled={deleting} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[13px] font-medium disabled:opacity-50 hover:bg-red-600 transition-colors">
+                {deleting ? 'Deleting...' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Complete Goal Modal */}
       {showCompleteModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
@@ -249,11 +320,19 @@ export default function GoalPage() {
             <>
               <button onClick={() => setEditing(true)}
                 className="px-4 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] transition-colors">
-                Edit goal
+                Edit
+              </button>
+              <button onClick={() => setShowPauseModal(true)}
+                className="px-4 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] font-medium text-[#666] hover:bg-[#f8f7f5] transition-colors">
+                ⏸ Pause
               </button>
               <button onClick={() => setShowCompleteModal(true)}
                 className="px-4 py-2.5 bg-green-600 text-white rounded-xl text-[13px] font-medium hover:bg-green-700 transition-colors">
-                Mark complete ✓
+                ✓ Complete
+              </button>
+              <button onClick={() => setShowDeleteModal(true)}
+                className="px-4 py-2.5 border border-red-200 text-red-500 rounded-xl text-[13px] font-medium hover:bg-red-50 transition-colors">
+                🗑
               </button>
             </>
           ) : (
