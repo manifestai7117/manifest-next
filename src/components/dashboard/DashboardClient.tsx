@@ -70,7 +70,7 @@ function DailyTaskCard({ goalId, fallbackAction }: { goalId: string; fallbackAct
       <div className="mb-4">
         <button onClick={generate} disabled={generating}
           className="w-full py-3 border-2 border-dashed border-[#b8922a]/40 rounded-2xl text-[13px] text-[#b8922a] hover:border-[#b8922a]/70 transition-colors flex items-center justify-center gap-2">
-          {generating ? <><span className="w-3 h-3 border-2 border-[#b8922a]/30 border-t-[#b8922a] rounded-full spin-anim"/>Generating...</> : '⚡ Get today's task'}
+          {generating ? <><span className="w-3 h-3 border-2 border-[#b8922a]/30 border-t-[#b8922a] rounded-full spin-anim"/>Generating...</> : "⚡ Get today's task"}
         </button>
       </div>
     )
