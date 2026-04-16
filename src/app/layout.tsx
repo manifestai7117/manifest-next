@@ -17,15 +17,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+        <meta name="theme-color" content="#111111"/>
+        <meta name="apple-mobile-web-app-capable" content="yes"/>
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
         <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
       </head>
       <body>
-        <Toaster position="bottom-right" toastOptions={{
-          style: { background: '#111', color: '#fff', borderLeft: '3px solid #b8922a', borderRadius: '10px', fontSize: '13px' },
-          duration: 4000,
-        }}/>
+        <script dangerouslySetInnerHTML={{ __html: `
+          try {
+            const dm = localStorage.getItem('manifest_dark_mode');
+            if (dm === 'true') document.documentElement.classList.add('dark');
+          } catch(e) {}
+        ` }}/>
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            style: { background: '#111', color: '#fff', borderLeft: '3px solid #b8922a', borderRadius: '10px', fontSize: '13px' },
+            duration: 4000,
+          }}
+        />
         {children}
       </body>
     </html>

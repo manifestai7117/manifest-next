@@ -3,13 +3,6 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 
-const QUICK = [
-  "I'm feeling stuck today",
-  "Help me plan this week",
-  "I missed yesterday — what now?",
-  "How do I push through resistance?",
-]
-
 export default function CoachPage() {
   const supabase = createClient()
   const [goals, setGoals] = useState<any[]>([])
@@ -18,22 +11,26 @@ export default function CoachPage() {
   const [inp, setInp] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const [usage, setUsage] = useState({ used: 0, limit: 5, remaining: 5 })
-  const [clearing, setClearing] = useState(false)
+  const [usage, setUsage] = useState({ used: 0, limit: 50, remaining: 50 })
+  // Daily task state
+  const [todayTask, setTodayTask] = useState<any>(null)
+  const [yesterdayTask, setYesterdayTask] = useState<any>(null)
+  const [needsYesterdayLog, setNeedsYesterdayLog] = useState(false)
+  const [yesterdayNote, setYesterdayNote] = useState('')
+  const [submittingLog, setSubmittingLog] = useState(false)
+  const [generatingTask, setGeneratingTask] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: gs } = await supabase.from('goals').select('*').eq('user_id', user.id).eq('is_active', true).order('created_at', { ascending: false })
+      const { data: gs } = await supabase.from('goals').select('*').eq('user_id', user.id).eq('is_active', true).eq('is_paused', false).order('created_at', { ascending: false })
       setGoals(gs || [])
-
-      // Restore last selected goal from localStorage
-      const savedGoalId = localStorage.getItem('selectedGoalId')
-      const g = gs?.find((x: any) => x.id === savedGoalId) || gs?.[0] || null
+      const savedId = localStorage.getItem('selectedGoalId')
+      const g = gs?.find((x: any) => x.id === savedId) || gs?.[0] || null
       setGoal(g)
-      if (g) await loadHistory(g)
+      if (g) { await loadHistory(g); await loadDailyTask(g.id) }
       setLoadingHistory(false)
     }
     load()
@@ -43,156 +40,260 @@ export default function CoachPage() {
 
   const loadHistory = async (g: any) => {
     setLoadingHistory(true)
-    const { data: history } = await supabase.from('coach_messages').select('role, content').eq('goal_id', g.id).order('created_at', { ascending: true }).limit(40)
+    const { data: history } = await supabase.from('coach_messages').select('role, content').eq('goal_id', g.id).order('created_at', { ascending: true }).limit(50)
     if (history?.length) {
       setMsgs(history)
     } else {
-      setMsgs([{ role: 'assistant', content: `Hey! I'm your Manifest coach. I'm here to help you with "${g.title}". I know your why and what's been stopping you. What's on your mind today?` }])
+      setMsgs([{ role: 'assistant', content: `I'm your Manifest coach for "${g.title}". I know your why, your obstacles, and your progress. Before we dive in — what did you actually do toward this goal yesterday?` }])
     }
-    // Load usage
     const res = await fetch(`/api/coach?goalId=${g.id}`)
     const data = await res.json()
     if (res.ok) setUsage(data)
     setLoadingHistory(false)
   }
 
+  const loadDailyTask = async (goalId: string) => {
+    const res = await fetch(`/api/daily-task?goalId=${goalId}`)
+    const data = await res.json()
+    if (res.ok) {
+      setTodayTask(data.todayTask)
+      setYesterdayTask(data.yesterdayTask)
+      setNeedsYesterdayLog(data.needsYesterdayLog)
+    }
+  }
+
   const switchGoal = async (g: any) => {
     setGoal(g)
     localStorage.setItem('selectedGoalId', g.id)
     await loadHistory(g)
+    await loadDailyTask(g.id)
   }
 
-  const clearChat = async () => {
-    if (!goal || clearing) return
-    setClearing(true)
-    // Delete from DB but keep memory — coach will still remember context via system prompt
-    await supabase.from('coach_messages').delete().eq('goal_id', goal.id)
-    setMsgs([{ role: 'assistant', content: `Chat cleared! I still remember everything about your goal and journey. What's on your mind today?` }])
-    toast.success('Chat cleared — memory kept')
-    setClearing(false)
-  }
-
-  const send = async (text?: string) => {
-    const content = (text || inp).trim()
-    if (!content || loading) return
-    if (usage.remaining <= 0) { toast.error(`Daily limit reached (${usage.limit}/day). Resets at midnight.`); return }
-    setInp('')
-    const next = [...msgs, { role: 'user', content }]
-    setMsgs(next)
-    setLoading(true)
-    try {
-      const res = await fetch('/api/coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next, goalId: goal?.id }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      setMsgs(m => [...m, { role: 'assistant', content: data.reply }])
-      setUsage(u => ({ ...u, used: u.used + 1, remaining: Math.max(0, u.remaining - 1) }))
-    } catch (e: any) {
-      toast.error(e.message || 'Coach unavailable. Try again.')
+  const logYesterdayWork = async () => {
+    if (!yesterdayNote.trim() || !yesterdayTask || submittingLog) return
+    setSubmittingLog(true)
+    const res = await fetch('/api/daily-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goalId: goal.id, action: 'log_yesterday', completionNote: yesterdayNote, yesterdayTaskId: yesterdayTask.id }),
+    })
+    if (res.ok) {
+      setNeedsYesterdayLog(false)
+      setYesterdayTask((p: any) => ({ ...p, completed: true, completion_note: yesterdayNote }))
+      toast.success('Logged! Now getting today\'s task...')
+      await generateTodayTask()
     }
-    setLoading(false)
+    setSubmittingLog(false)
   }
+
+  const generateTodayTask = async () => {
+    if (!goal || generatingTask) return
+    setGeneratingTask(true)
+    const res = await fetch('/api/daily-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goalId: goal.id, action: 'generate' }),
+    })
+    const data = await res.json()
+    if (res.ok && data.task) setTodayTask(data.task)
+    setGeneratingTask(false)
+  }
+
+  const send = async () => {
+    if (!inp.trim() || loading || !goal) return
+    if (usage.remaining <= 0) { toast.error('Daily limit reached. Resets at midnight.'); return }
+    const userMsg = inp.trim()
+    setInp('')
+    setMsgs(prev => [...prev, { role: 'user', content: userMsg }])
+    setLoading(true)
+
+    // Include daily task context in messages
+    const taskContext = todayTask ? `[Today's assigned task: "${todayTask.task}"]` : ''
+    const yesterdayContext = yesterdayTask?.completed ? `[Yesterday's task completed: "${yesterdayTask.completion_note}"]` : yesterdayTask ? `[Yesterday's task was NOT logged: "${yesterdayTask.task}"]` : ''
+    
+    const allMsgs = [
+      ...(taskContext || yesterdayContext ? [{ role: 'user', content: `${taskContext} ${yesterdayContext}`.trim() }, { role: 'assistant', content: 'Understood.' }] : []),
+      ...msgs,
+      { role: 'user', content: userMsg }
+    ]
+
+    const res = await fetch('/api/coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: allMsgs.slice(-20), goalId: goal.id }),
+    })
+    const data = await res.json()
+    setLoading(false)
+    if (data.error) { toast.error(data.error); return }
+    setMsgs(prev => [...prev, { role: 'assistant', content: data.reply }])
+    setUsage(prev => ({ ...prev, used: prev.used + 1, remaining: Math.max(0, prev.remaining - 1) }))
+  }
+
+  const clearHistory = async () => {
+    if (!goal) return
+    await supabase.from('coach_messages').delete().eq('goal_id', goal.id)
+    setMsgs([{ role: 'assistant', content: `Fresh start. I still know your goal "${goal.title}" and everything about your progress. What's on your mind?` }])
+    toast.success('Chat cleared')
+  }
+
+  if (loadingHistory) return (
+    <div className="fade-up max-w-[760px]">
+      <div className="animate-pulse space-y-3">
+        <div className="h-8 bg-[#f0ede8] rounded w-32"/>
+        <div className="h-48 bg-[#f0ede8] rounded-2xl"/>
+      </div>
+    </div>
+  )
+
+  if (!goal) return (
+    <div className="fade-up">
+      <h1 className="font-serif text-[32px] mb-4">AI Coach</h1>
+      <p className="text-[#666] mb-4">Create a goal first to start coaching.</p>
+    </div>
+  )
 
   return (
     <div className="fade-up max-w-[760px]">
-      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h1 className="font-serif text-[32px] mb-1">AI Coach</h1>
-          <p className="text-[14px] text-[#666]">
-            {goal ? `Coaching for: "${goal.title}"` : 'Set up a goal to unlock full coaching'}
-          </p>
+          <h1 className="font-serif text-[32px] mb-0.5">AI Coach</h1>
+          <p className="text-[13px] text-[#999]">Coaching for: "{goal.title}"</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-[12px] font-medium px-3 py-1.5 rounded-full ${usage.remaining > 0 ? 'bg-green-50 text-green-700' : 'bg-[#f2f0ec] text-[#999]'}`}>
+        <div className="flex gap-2 flex-wrap">
+          <span className={`text-[12px] font-medium px-3 py-1.5 rounded-full ${usage.remaining > 5 ? 'bg-green-50 text-green-700' : usage.remaining > 0 ? 'bg-[#faf3e0] text-[#b8922a]' : 'bg-red-50 text-red-600'}`}>
             {usage.remaining} chats left today
           </span>
-          {goal && (
-            <button onClick={clearChat} disabled={clearing}
-              className="text-[12px] text-[#999] hover:text-[#666] px-3 py-1.5 border border-[#e8e8e8] rounded-full hover:border-[#d0d0d0] transition-colors">
-              Clear chat
-            </button>
-          )}
+          <button onClick={clearHistory} className="px-3 py-1.5 border border-[#e8e8e8] rounded-xl text-[12px] text-[#999] hover:bg-[#f8f7f5] transition-colors">Clear chat</button>
         </div>
       </div>
 
-      {/* Goal tabs if multiple */}
+      {/* Goal tabs */}
       {goals.length > 1 && (
         <div className="flex gap-2 mb-4 flex-wrap">
           {goals.map(g => (
             <button key={g.id} onClick={() => switchGoal(g)}
-              className={`px-4 py-2 rounded-full text-[13px] border transition-all ${goal?.id === g.id ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#666] border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>
-              {(g.display_title || g.title).slice(0, 28)}
+              className={`px-3.5 py-1.5 rounded-full text-[12px] border transition-all ${g.id === goal.id ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
+              {g.title.slice(0, 30)}
             </button>
           ))}
         </div>
       )}
 
-      <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden mb-4">
-        <div className="px-5 py-4 border-b border-[#e8e8e8] flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[#b8922a] flex items-center justify-center text-white font-semibold text-[14px]">M</div>
-          <div>
-            <p className="text-[13px] font-medium">Manifest Coach</p>
-            <p className="text-[11px] text-green-500">● Active</p>
-          </div>
-          {goal && (
-            <div className="ml-auto flex gap-2 text-[11px] text-[#999] flex-wrap justify-end">
-              <span className="bg-[#faf3e0] text-[#b8922a] px-2 py-1 rounded-full font-medium">{goal.streak}d streak</span>
-              <span className="bg-[#f2f0ec] px-2 py-1 rounded-full">{goal.progress}%</span>
+      {/* MANDATORY: Log yesterday's work first */}
+      {needsYesterdayLog && yesterdayTask && (
+        <div className="bg-[#111] rounded-2xl p-5 mb-4 border border-[#b8922a]/30">
+          <div className="flex items-start gap-3 mb-4">
+            <span className="text-[24px]">📋</span>
+            <div>
+              <p className="font-medium text-white text-[15px] mb-1">Before today's session — log yesterday first</p>
+              <p className="text-white/60 text-[13px]">Yesterday's task: <span className="text-white/80 italic">"{yesterdayTask.task}"</span></p>
+              <p className="text-white/50 text-[12px] mt-1">Accountability is non-negotiable. What did you actually do?</p>
             </div>
+          </div>
+          <textarea
+            value={yesterdayNote}
+            onChange={e => setYesterdayNote(e.target.value)}
+            placeholder="Be honest — did you complete it? What happened? Even if you didn't do it, say so. That's the starting point."
+            className="w-full bg-white/10 text-white placeholder-white/30 text-[14px] px-4 py-3 rounded-xl border border-white/10 outline-none resize-none leading-[1.6] mb-3"
+            rows={3}
+          />
+          <button onClick={logYesterdayWork} disabled={!yesterdayNote.trim() || submittingLog}
+            className="px-5 py-2.5 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium disabled:opacity-40 hover:bg-[#9a7820] transition-colors">
+            {submittingLog ? 'Logging...' : 'Log & continue →'}
+          </button>
+        </div>
+      )}
+
+      {/* Today's Daily Task */}
+      {!needsYesterdayLog && (
+        <div className="mb-4">
+          {todayTask ? (
+            <div className={`rounded-2xl p-5 border ${todayTask.completed ? 'bg-green-50 border-green-200' : 'bg-[#faf3e0] border-[#b8922a]/30'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <p className="text-[10px] font-bold tracking-[.12em] uppercase text-[#b8922a] mb-2">
+                    {todayTask.completed ? '✓ Today\'s task — completed' : '⚡ Today\'s task'}
+                  </p>
+                  <p className="text-[14px] text-[#111] leading-[1.7] font-medium">{todayTask.task}</p>
+                </div>
+                {!todayTask.completed && (
+                  <button onClick={async () => {
+                    await supabase.from('daily_tasks').update({ completed: true }).eq('id', todayTask.id)
+                    setTodayTask((p: any) => ({ ...p, completed: true }))
+                    toast.success('Task marked done! Great work.')
+                  }} className="flex-shrink-0 px-3 py-1.5 bg-[#111] text-white rounded-xl text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors">
+                    Mark done ✓
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <button onClick={generateTodayTask} disabled={generatingTask}
+              className="w-full py-3.5 border-2 border-dashed border-[#b8922a]/40 rounded-2xl text-[13px] text-[#b8922a] hover:border-[#b8922a]/70 transition-colors flex items-center justify-center gap-2">
+              {generatingTask
+                ? <><span className="w-3.5 h-3.5 border-2 border-[#b8922a]/30 border-t-[#b8922a] rounded-full spin-anim"/> Generating today's task...</>
+                : '⚡ Generate today\'s task'
+              }
+            </button>
           )}
         </div>
+      )}
 
-        <div className="h-[420px] overflow-y-auto p-5 flex flex-col gap-3">
-          {loadingHistory ? (
-            <div className="flex items-center gap-2 text-[13px] text-[#999]">
-              <div className="w-4 h-4 border-2 border-[#e8e8e8] border-t-[#b8922a] rounded-full spin-anim"/>
-              Loading conversation...
+      {/* Chat */}
+      <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden">
+        {/* Coach header */}
+        <div className="px-5 py-4 border-b border-[#f0ede8] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#b8922a] flex items-center justify-center text-white font-semibold text-[14px]">M</div>
+            <div>
+              <p className="font-medium text-[14px]">Manifest Coach</p>
+              <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-green-500"/><span className="text-[11px] text-green-600">Active</span></div>
             </div>
-          ) : msgs.map((m, i) => (
-            <div key={i} className={`msg-in flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[82%] px-4 py-3 text-[14px] leading-[1.6] rounded-2xl ${m.role === 'user' ? 'bg-[#111] text-white rounded-br-sm' : 'bg-[#f8f7f5] text-[#111] rounded-bl-sm'}`}>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-[#b8922a] bg-[#faf3e0] px-2.5 py-1 rounded-full">{goal.streak}d streak</span>
+            <span className="text-[11px] text-[#999] bg-[#f2f0ec] px-2.5 py-1 rounded-full">{goal.progress}%</span>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="h-[380px] overflow-y-auto px-5 py-4 space-y-4">
+          {msgs.map((m, i) => (
+            <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              {m.role === 'assistant' && <div className="w-8 h-8 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0 mt-0.5">M</div>}
+              <div className={`max-w-[82%] px-4 py-3 rounded-2xl text-[14px] leading-[1.7] ${m.role === 'user' ? 'bg-[#111] text-white rounded-tr-sm' : 'bg-[#f8f7f5] text-[#111] rounded-tl-sm'}`}>
                 {m.content}
               </div>
             </div>
           ))}
           {loading && (
-            <div className="flex justify-start">
-              <div className="bg-[#f8f7f5] px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#999] bounce-1"/>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#999] bounce-2"/>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#999] bounce-3"/>
+            <div className="flex gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0">M</div>
+              <div className="bg-[#f8f7f5] px-4 py-3 rounded-2xl flex gap-1.5 items-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-1"/><span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-2"/><span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-3"/>
               </div>
             </div>
           )}
           <div ref={endRef}/>
         </div>
 
-        <div className="border-t border-[#e8e8e8] flex">
-          <input
-            value={inp}
-            onChange={e => setInp(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-            placeholder={usage.remaining > 0 ? "Ask your coach anything..." : "Daily limit reached — resets at midnight"}
-            disabled={usage.remaining <= 0}
-            className="flex-1 px-5 py-3.5 text-[14px] outline-none bg-transparent disabled:opacity-50"
-          />
-          <button onClick={() => send()} disabled={loading || !inp.trim() || usage.remaining <= 0}
-            className="px-5 bg-[#b8922a] text-white disabled:opacity-40 transition-opacity hover:bg-[#9a7820]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
-          </button>
+        {/* Input */}
+        <div className="border-t border-[#e8e8e8] p-4">
+          <div className="flex gap-2">
+            <input
+              value={inp}
+              onChange={e => setInp(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+              placeholder={needsYesterdayLog ? "Log yesterday's work first ↑" : "Talk to your coach..."}
+              disabled={needsYesterdayLog || usage.remaining <= 0}
+              className="flex-1 px-4 py-2.5 bg-[#f8f7f5] border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#b8922a] disabled:opacity-50 transition-colors"
+            />
+            <button onClick={send} disabled={!inp.trim() || loading || needsYesterdayLog || usage.remaining <= 0}
+              className="px-4 py-2.5 bg-[#111] text-white rounded-xl hover:bg-[#2a2a2a] transition-colors disabled:opacity-40">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
+            </button>
+          </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        {QUICK.map(q => (
-          <button key={q} onClick={() => send(q)} disabled={usage.remaining <= 0}
-            className="text-left px-4 py-3 bg-white border border-[#e8e8e8] rounded-xl text-[13px] text-[#666] hover:border-[#d0d0d0] hover:text-[#111] transition-all disabled:opacity-40">
-            {q}
-          </button>
-        ))}
       </div>
     </div>
   )

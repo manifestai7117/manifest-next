@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -6,20 +7,17 @@ import { useState, useEffect } from 'react'
 import NotificationBell from './NotificationBell'
 
 const NAV = [
-  { href: '/dashboard',                  label: 'Overview',   emoji: '⌂' },
-  { href: '/dashboard/goal',             label: 'My Goals',   emoji: '◎' },
-  { href: '/dashboard/coach',            label: 'AI Coach',   emoji: '✦' },
-  { href: '/dashboard/circles',          label: 'Circles',    emoji: '◉' },
-  { href: '/dashboard/friends',          label: 'Friends',    emoji: '♡' },
-  { href: '/dashboard/feed',             label: 'Feed',       emoji: '◈' },
-  { href: '/dashboard/art',              label: 'Vision Art', emoji: '⬡' },
-  { href: '/dashboard/streak',           label: 'Streak',     emoji: '⚡' },
-  { href: '/dashboard/analytics',        label: 'Analytics',  emoji: '↗' },
-  { href: '/dashboard/circles/discover', label: 'Discover',   emoji: '⊕' },
-  { href: '/dashboard/print',            label: 'Print Shop', emoji: '⬜' },
-  { href: '/dashboard/feedback',         label: 'Feedback',   emoji: '✉' },
-  { href: '/dashboard/settings',         label: 'Settings',   emoji: '⚙' },
-  { href: '/dashboard/profile',          label: 'Profile',    emoji: '◯' },
+  { href: '/dashboard',         label: 'Overview',   emoji: '⌂' },
+  { href: '/dashboard/goal',    label: 'My Goals',   emoji: '◎' },
+  { href: '/dashboard/coach',   label: 'AI Coach',   emoji: '✦' },
+  { href: '/dashboard/circles', label: 'Circles',    emoji: '◉' },
+  { href: '/dashboard/friends', label: 'Friends',    emoji: '♡' },
+  { href: '/dashboard/feed',    label: 'Feed',       emoji: '◈' },
+  { href: '/dashboard/art',     label: 'Vision Art', emoji: '⬡' },
+  { href: '/dashboard/streak',  label: 'Streak',     emoji: '⚡' },
+  { href: '/dashboard/print',   label: 'Print Shop', emoji: '⬜' },
+  { href: '/dashboard/settings',label: 'Settings',   emoji: '⚙' },
+  { href: '/dashboard/profile', label: 'Profile',    emoji: '◯' },
 ]
 
 const BOTTOM_NAV = [
@@ -29,6 +27,30 @@ const BOTTOM_NAV = [
   { href: '/dashboard/feed',   label: 'Feed',   emoji: '◈' },
   { href: '/dashboard/streak', label: 'Streak', emoji: '⚡' },
 ]
+
+
+function ScrollRestorer({ pathname, children }: { pathname: string; children: React.ReactNode }) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const scrollMap = React.useRef<Record<string, number>>({})
+
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    // Restore scroll for this path
+    const saved = scrollMap.current[pathname] || 0
+    el.scrollTop = saved
+    // Save scroll as user scrolls
+    const onScroll = () => { scrollMap.current[pathname] = el.scrollTop }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [pathname])
+
+  return (
+    <div ref={ref} className="flex-1 overflow-y-auto h-screen md:h-auto">
+      {children}
+    </div>
+  )
+}
 
 export default function DashboardShell({ children, profile }: { children: React.ReactNode; profile: any }) {
   const pathname = usePathname()
@@ -65,7 +87,7 @@ export default function DashboardShell({ children, profile }: { children: React.
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {NAV.map(({ href, label, emoji }) => (
           <Link key={href} href={href} onClick={() => setMobileOpen(false)}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${pathname === href ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
+            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${pathname === href || (href === '/dashboard/circles' && pathname.startsWith('/dashboard/circles')) ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
             <span className="text-[14px] w-5 text-center flex-shrink-0">{emoji}</span>
             {label}
           </Link>
@@ -145,9 +167,11 @@ export default function DashboardShell({ children, profile }: { children: React.
         <div className="hidden md:flex items-center justify-end px-6 py-3 border-b border-[#e8e8e8] bg-white sticky top-0 z-20">
           <NotificationBell />
         </div>
-        <div className="p-4 md:p-8 pt-20 md:pt-6 pb-24 md:pb-8">
-          {children}
-        </div>
+        <ScrollRestorer pathname={pathname}>
+          <div className="p-4 md:p-8 pt-20 md:pt-6 pb-24 md:pb-8">
+            {children}
+          </div>
+        </ScrollRestorer>
       </main>
 
       {/* Mobile bottom nav */}

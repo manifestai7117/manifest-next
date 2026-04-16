@@ -207,9 +207,13 @@ export default function ArtPage() {
       {/* 3 Options grid */}
       {!generating && options.length > 0 && (
         <div>
-          {chosenIdx === null && (
-            <p className="text-[14px] text-[#666] mb-4 font-medium">Choose the vision that resonates most with you:</p>
-          )}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-px flex-1 bg-[#e8e8e8]"/>
+            <p className="text-[11px] font-bold tracking-[.14em] uppercase text-[#999]">
+              {chosenIdx === null ? '✦ Choose your vision' : '✦ Suggested visions'}
+            </p>
+            <div className="h-px flex-1 bg-[#e8e8e8]"/>
+          </div>
           <div className={`grid gap-4 mb-6 ${options.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
             {options.map((opt, i) => (
               <div key={i}
@@ -252,6 +256,14 @@ export default function ArtPage() {
             ))}
           </div>
 
+          {/* Separator + Chosen art heading */}
+          {chosenImage && (
+            <div className="flex items-center gap-3 my-5">
+              <div className="h-px flex-1 bg-[#e8e8e8]"/>
+              <p className="text-[11px] font-bold tracking-[.14em] uppercase text-[#b8922a]">✦ Your chosen vision</p>
+              <div className="h-px flex-1 bg-[#e8e8e8]"/>
+            </div>
+          )}
           {/* Chosen image detail view */}
           {chosenImage && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
