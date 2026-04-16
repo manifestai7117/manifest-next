@@ -7,10 +7,23 @@ import MediaUploader from '@/components/dashboard/MediaUploader'
 type Profile = { id: string; full_name: string; avatar_url: string; plan: string }
 type Comment = { id: string; post_id: string; user_id: string; content: string; created_at: string; profiles?: Profile }
 type Post = {
-  id: string; user_id: string; content: string; post_type: string; visibility: string
-  created_at: string; profiles?: Profile; likes_count: number; user_liked: boolean
-  goal_title?: string; goal_id?: string; comments?: Comment[]; comment_count: number
-  is_archived?: boolean; relevance_score?: number
+  id: string
+  user_id: string
+  content: string
+  post_type: string
+  visibility: string
+  created_at: string
+  profiles?: Profile
+  likes_count: number
+  user_liked: boolean
+  goal_title?: string
+  goal_id?: string
+  comments?: Comment[]
+  comment_count: number
+  is_archived?: boolean
+  relevance_score?: number
+  media_url?: string | null
+  media_type?: 'image' | 'video' | null
 }
 
 const TYPE_CFG: Record<string, { emoji: string; color: string; bg: string }> = {
