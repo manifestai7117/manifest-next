@@ -257,14 +257,41 @@ export default function CirclesPage() {
           {joined ? (
             <div className="border-t border-[#e8e8e8] flex">
               <div className="flex flex-col">
-              <div className="px-4 pt-2 border-t border-[#e8e8e8]">
-                <MediaUploader onUpload={(url, t) => { setCircleMediaUrl(url); setCircleMediaType(t) }} onClear={() => { setCircleMediaUrl(''); setCircleMediaType(undefined) }} mediaUrl={circleMediaUrl} mediaType={circleMediaType} context="circle"/>
-              </div>
-              <div className="flex">
-            <input value={inp} onChange={e => setInp(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMsg()} placeholder="Share your update..." className="flex-1 px-5 py-3.5 text-[14px] outline-none"/>
-              <button onClick={sendMsg} disabled={sending || (!inp.trim() && !circleMediaUrl)} className="px-5 bg-[#111] text-white disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
-              </button>
+                <div className="px-4 pt-2 border-t border-[#e8e8e8]">
+                  <MediaUploader
+                    onUpload={(url, t) => {
+                      setCircleMediaUrl(url)
+                      setCircleMediaType(t)
+                    }}
+                    onClear={() => {
+                      setCircleMediaUrl('')
+                      setCircleMediaType(undefined)
+                    }}
+                    mediaUrl={circleMediaUrl}
+                    mediaType={circleMediaType}
+                    context="circle"
+                  />
+                </div>
+
+                <div className="flex">
+                  <input
+                    value={inp}
+                    onChange={e => setInp(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && sendMsg()}
+                    placeholder="Share your update..."
+                    className="flex-1 px-5 py-3.5 text-[14px] outline-none"
+                  />
+                  <button
+                    onClick={sendMsg}
+                    disabled={sending || (!inp.trim() && !circleMediaUrl)}
+                    className="px-5 bg-[#111] text-white disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="22" y1="2" x2="11" y2="13" />
+                      <polygon points="22,2 15,22 11,13 2,9" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
