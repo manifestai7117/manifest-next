@@ -209,7 +209,7 @@ export default function CirclesPage() {
             <p className="font-medium text-[13px] mb-3">Members</p>
             <div className="flex flex-wrap gap-2">
               {members.map((m: any) => (
-                <button key={m.id} onClick={() => setViewingMember(m.profile?.id || m.user_id)} className="flex items-center gap-2 px-3 py-1.5 bg-[#f8f7f5] rounded-xl hover:bg-[#f0ede8] transition-colors">
+                <button key={m.id} onClick={() => setViewingMember(m.profiles?.id || m.user_id)} className="flex items-center gap-2 px-3 py-1.5 bg-[#f8f7f5] rounded-xl hover:bg-[#f0ede8] transition-colors">
                   {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} className="w-6 h-6 rounded-full object-cover"/> : <div className="w-6 h-6 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[10px]">{m.profiles?.full_name?.[0]}</div>}
                   <span className="text-[12px] font-medium">{m.profiles?.full_name || 'Member'}</span>
                   {m.profiles?.plan === 'pro' && <span className="text-[9px] bg-[#b8922a] text-white px-1.5 py-0.5 rounded-full">PRO</span>}
