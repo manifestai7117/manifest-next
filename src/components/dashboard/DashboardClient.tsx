@@ -81,7 +81,7 @@ function DailyTaskCard({ goalId, fallbackAction }: { goalId: string; fallbackAct
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
           <p className="text-[10px] font-bold tracking-[.12em] uppercase text-[#b8922a] mb-2">
-            {task?.completed ? '✓ Today's task — done!' : '⚡ Do this today'}
+            {task?.completed ? "✓ Today's task — done!" : "⚡ Do this today"}
           </p>
           <p className="text-[14px] text-[#111] leading-[1.7] font-medium">{displayText}</p>
         </div>
