@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
+import MediaUploader from '@/components/dashboard/MediaUploader'
 
 export default function FriendsPage() {
   const supabase = createClient()
@@ -16,6 +17,8 @@ export default function FriendsPage() {
   const [dmClearedAt, setDmClearedAt] = useState<Record<string, string>>({})
   const [inp, setInp] = useState('')
   const [sending, setSending] = useState(false)
+  const [dmMediaUrl, setDmMediaUrl] = useState('')
+  const [dmMediaType, setDmMediaType] = useState<'image'|'video'|undefined>()
   const [loading, setLoading] = useState(true)
   const endRef = useRef<HTMLDivElement>(null)
 
@@ -102,6 +105,24 @@ export default function FriendsPage() {
     toast.success('Friend request sent!')
   }
 
+  const cancelRequest = async (addresseeId: string) => {
+    await supabase.from('friendships').delete()
+      .eq('requester', user.id).eq('addressee', addresseeId).eq('status', 'pending')
+    setUsers(prev => prev.map(u => u.id === addresseeId ? { ...u, isPending: false } : u))
+    toast.success('Request cancelled')
+  }
+
+  const blockUser = async (blockedId: string) => {
+    if (!confirm('Block this user? They will not be able to see your profile or posts.')) return
+    await supabase.from('blocked_users').upsert({ blocker_id: user.id, blocked_id: blockedId })
+    // Also remove any friendship
+    await supabase.from('friendships').delete()
+      .or(`and(requester.eq.${user.id},addressee.eq.${blockedId}),and(requester.eq.${blockedId},addressee.eq.${user.id})`)
+    setUsers(prev => prev.filter(u => u.id !== blockedId))
+    setFriends(prev => prev.filter((f: any) => f.id !== blockedId))
+    toast.success('User blocked')
+  }
+
   const acceptRequest = async (friendshipId: string, fromUser: any) => {
     const { error } = await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId)
     if (error) { toast.error('Could not accept'); return }
@@ -149,11 +170,12 @@ export default function FriendsPage() {
   }
 
   const sendDM = async () => {
-    if (!inp.trim() || !activeChat || sending) return
+    if ((!inp.trim() && !dmMediaUrl) || !activeChat || sending) return
     const content = inp.trim()
     setInp('')
     setSending(true)
-    const { data: msg } = await supabase.from('direct_messages').insert({ sender_id: user.id, recipient_id: activeChat.id, content }).select().single()
+    const { data: msg } = await supabase.from('direct_messages').insert({ sender_id: user.id, recipient_id: activeChat.id, content, media_url: dmMediaUrl || null, media_type: dmMediaType || null }).select().single()
+    setDmMediaUrl(''); setDmMediaType(undefined)
     if (msg) setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg])
     setSending(false)
   }

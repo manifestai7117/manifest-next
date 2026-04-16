@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
@@ -30,11 +31,76 @@ const AFFIRMATIONS_EXTRA = [
   'My consistency is my superpower.',
 ]
 
+function DailyTaskCard({ goalId, fallbackAction }: { goalId: string; fallbackAction?: string }) {
+  const supabase = createClient()
+  const [task, setTask] = useState<any>(null)
+  const [generating, setGenerating] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    const load = async () => {
+      const today = new Date().toISOString().split('T')[0]
+      const { data } = await supabase.from('daily_tasks').select('*').eq('goal_id', goalId).eq('task_date', today).maybeSingle()
+      setTask(data)
+      setLoaded(true)
+    }
+    load()
+  }, [goalId])
+
+  const generate = async () => {
+    if (generating) return
+    setGenerating(true)
+    const res = await fetch('/api/daily-task', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goalId, action: 'generate' }) })
+    const data = await res.json()
+    if (data.task) setTask(data.task)
+    setGenerating(false)
+  }
+
+  const markDone = async () => {
+    if (!task) return
+    await supabase.from('daily_tasks').update({ completed: true }).eq('id', task.id)
+    setTask((p: any) => ({ ...p, completed: true }))
+  }
+
+  if (!loaded) return null
+
+  const displayText = task?.task || fallbackAction
+  if (!displayText && !task) {
+    return (
+      <div className="mb-4">
+        <button onClick={generate} disabled={generating}
+          className="w-full py-3 border-2 border-dashed border-[#b8922a]/40 rounded-2xl text-[13px] text-[#b8922a] hover:border-[#b8922a]/70 transition-colors flex items-center justify-center gap-2">
+          {generating ? <><span className="w-3 h-3 border-2 border-[#b8922a]/30 border-t-[#b8922a] rounded-full spin-anim"/>Generating...</> : '⚡ Get today's task'}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`rounded-2xl p-5 mb-4 border ${task?.completed ? 'bg-green-50/50 border-green-200' : 'bg-[#faf3e0] border-[#b8922a]/30'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <p className="text-[10px] font-bold tracking-[.12em] uppercase text-[#b8922a] mb-2">
+            {task?.completed ? '✓ Today's task — done!' : '⚡ Do this today'}
+          </p>
+          <p className="text-[14px] text-[#111] leading-[1.7] font-medium">{displayText}</p>
+        </div>
+        {!task?.completed && task && (
+          <button onClick={markDone} className="flex-shrink-0 px-3 py-1.5 bg-[#111] text-white rounded-xl text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors">
+            Done ✓
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardClient({
   goals, profile, allTodayCheckins, allCheckins, allCoachMsgs,
   existingRating, userId, greeting, firstName, dayOfYear, todayDate, nudges = [],
 }: Props) {
   const supabase = createClient()
+  const router = useRouter()
   const [selectedGoalId, setSelectedGoalId] = useState(goals[0]?.id || '')
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
@@ -92,6 +158,16 @@ export default function DashboardClient({
           + Add goal
         </Link>
       </div>
+      {/* Last log time */}
+      {recentCheckins.length > 0 && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"/>
+          <p className="text-[12px] text-[#999]">
+            Last logged: {new Date(recentCheckins[0]?.created_at || '').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            {recentCheckins[0]?.note ? ` — "${recentCheckins[0].note.slice(0, 60)}${recentCheckins[0].note.length > 60 ? '...' : ''}"` : ''}
+          </p>
+        </div>
+      )}
       <p className="text-[#666] mb-5 text-[14px]">
         {checkedInToday
           ? `Checked in today ✓ · ${goal.streak} day streak 🔥`
@@ -186,13 +262,8 @@ export default function DashboardClient({
         <p className="font-serif italic text-[16px] text-[#111] leading-[1.65]">"{todayAffirmation}"</p>
       </div>
 
-      {/* Today's action */}
-      {goal.today_action && (
-        <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
-          <p className="text-[10px] font-medium tracking-[.12em] uppercase text-[#b8922a] mb-2">Do this today</p>
-          <p className="text-[14px] text-[#111] leading-[1.65]">{goal.today_action}</p>
-        </div>
-      )}
+      {/* Daily Task - unified */}
+      <DailyTaskCard goalId={goal.id} fallbackAction={goal.today_action}/>
 
       {/* Goals summary */}
       {goals.length > 1 && (

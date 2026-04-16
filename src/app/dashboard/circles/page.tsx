@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 import MemberProfile from '@/components/dashboard/MemberProfile'
+import MediaUploader from '@/components/dashboard/MediaUploader'
 
 const CATEGORIES = ['All','Health & fitness','Career & business','Financial freedom','Learning & skills','Personal growth','Travel & adventure','Creative work','Other']
 
@@ -28,6 +29,8 @@ export default function CirclesPage() {
   const [creating, setCreating] = useState(false)
   const [newCircle, setNewCircle] = useState({ name: '', category: '', goal_description: '', is_private: false })
   const [joining, setJoining] = useState<string|null>(null)
+  const [circleMediaUrl, setCircleMediaUrl] = useState('')
+  const [circleMediaType, setCircleMediaType] = useState<'image'|'video'|undefined>()
   const [leaving, setLeaving] = useState<string|null>(null)
   const [clearedAt, setClearedAt] = useState<Record<string,string>>({})
   const endRef = useRef<HTMLDivElement>(null)
@@ -101,8 +104,11 @@ export default function CirclesPage() {
     setJoining(null)
   }
 
+  const [confirmLeave, setConfirmLeave] = useState<string|null>(null)
+
   const leaveCircle = async (circleId: string) => {
-    if (!user || !confirm('Leave this circle? You can rejoin anytime.')) return
+    if (!user) return
+    if (confirmLeave !== circleId) { setConfirmLeave(circleId); return }
     setLeaving(circleId)
     await supabase.from('circle_members').delete().eq('circle_id', circleId).eq('user_id', user.id)
     setMyCircleIds(prev => prev.filter(id => id !== circleId))
@@ -122,11 +128,12 @@ export default function CirclesPage() {
   }
 
   const sendMsg = async () => {
-    if (!inp.trim() || sending || !activeCircle) return
+    if ((!inp.trim() && !circleMediaUrl) || sending || !activeCircle) return
     const text = inp.trim()
     setInp('')
     setSending(true)
-    await fetch('/api/circles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ circleId: activeCircle.id, content: text }) })
+    await fetch('/api/circles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ circleId: activeCircle.id, content: text || '📎', media_url: circleMediaUrl || null, media_type: circleMediaType || null }) })
+    setCircleMediaUrl(''); setCircleMediaType(undefined)
     setSending(false)
     // Re-fetch last message
     const { data } = await supabase.from('circle_messages').select('*, profiles:profiles(id, full_name, avatar_url)').eq('circle_id', activeCircle.id).order('created_at', { ascending: false }).limit(1)
@@ -158,7 +165,26 @@ export default function CirclesPage() {
     const count = memberCounts[activeCircle.id] ?? 0
     return (
       <div className="fade-up max-w-[760px]">
-        <button onClick={() => setActiveCircle(null)} className="flex items-center gap-1.5 text-[13px] text-[#666] mb-5 hover:text-[#111]">← Back to circles</button>
+        {confirmLeave && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl max-w-[380px] w-full p-6 shadow-2xl">
+            <h3 className="font-serif text-[20px] mb-2">Leave this circle?</h3>
+            <p className="text-[13px] text-[#666] mb-5">You can rejoin anytime. Your previous messages will remain.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmLeave(null)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
+              <button onClick={async () => { 
+                await supabase.from('circle_members').delete().eq('circle_id', confirmLeave).eq('user_id', user.id)
+                setMyCircleIds(prev => prev.filter(id => id !== confirmLeave))
+                setMyCircles(prev => prev.filter(c => c.id !== confirmLeave))
+                setActiveCircle(null)
+                setConfirmLeave(null)
+                toast.success('Left circle')
+              }} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[13px] font-medium hover:bg-red-600">Leave</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <button onClick={() => setActiveCircle(null)} className="flex items-center gap-1.5 text-[13px] text-[#666] mb-5 hover:text-[#111]">← Back to circles</button>
         <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -171,8 +197,9 @@ export default function CirclesPage() {
             <button onClick={() => clearMyView(activeCircle.id)} className="px-3 py-2 border border-[#e8e8e8] rounded-xl text-[12px] text-[#999] hover:bg-[#f8f7f5]">Clear view</button>
             <button onClick={() => setShowMembers(!showMembers)} className="px-3 py-2 border border-[#e8e8e8] rounded-xl text-[12px] font-medium hover:bg-[#f8f7f5]">Members ({count})</button>
             {joined && (
-              <button onClick={() => leaveCircle(activeCircle.id)} disabled={leaving === activeCircle.id} className="px-3 py-2 border border-red-200 text-red-500 rounded-xl text-[12px] hover:bg-red-50 transition-colors disabled:opacity-50">
-                {leaving === activeCircle.id ? '...' : 'Leave'}
+              <button onClick={() => leaveCircle(activeCircle.id)}
+                className={`px-3 py-2 border rounded-xl text-[12px] transition-colors ${confirmLeave === activeCircle.id ? 'bg-red-500 text-white border-red-500' : 'border-red-200 text-red-500 hover:bg-red-50'}`}>
+                {confirmLeave === activeCircle.id ? 'Confirm leave?' : 'Leave'}
               </button>
             )}
           </div>
@@ -206,7 +233,12 @@ export default function CirclesPage() {
                   )}
                   <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
                     {!isMe && <p className="text-[11px] text-[#999] px-1">{isAI ? 'Manifest Coach' : m.profiles?.full_name}</p>}
-                    <div className={`px-4 py-2.5 rounded-2xl text-[14px] leading-[1.6] ${isMe ? 'bg-[#111] text-white rounded-tr-sm' : isAI ? 'bg-[#faf3e0] text-[#111] rounded-tl-sm' : 'bg-[#f8f7f5] text-[#111] rounded-tl-sm'}`}>{m.content}</div>
+                    <div className={`rounded-2xl overflow-hidden ${isMe ? 'bg-[#111] text-white rounded-tr-sm' : isAI ? 'bg-[#faf3e0] text-[#111] rounded-tl-sm' : 'bg-[#f8f7f5] text-[#111] rounded-tl-sm'}`}>
+                      {m.media_url && (
+                        <div>{m.media_type === 'video' ? <video src={m.media_url} controls className="w-full max-h-40 object-cover"/> : <img src={m.media_url} alt="" className="w-full max-h-40 object-cover cursor-pointer" onClick={() => window.open(m.media_url, '_blank')}/>}</div>
+                      )}
+                      {m.content && m.content !== '📎' && <p className="px-4 py-2.5 text-[14px] leading-[1.6]">{m.content}</p>}
+                    </div>
                     <p className="text-[10px] text-[#bbb] px-1">{new Date(m.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
                   </div>
                 </div>
@@ -224,10 +256,16 @@ export default function CirclesPage() {
           </div>
           {joined ? (
             <div className="border-t border-[#e8e8e8] flex">
-              <input value={inp} onChange={e => setInp(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMsg()} placeholder="Share your update..." className="flex-1 px-5 py-3.5 text-[14px] outline-none"/>
-              <button onClick={sendMsg} disabled={sending || !inp.trim()} className="px-5 bg-[#111] text-white disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors">
+              <div className="flex flex-col">
+              <div className="px-4 pt-2 border-t border-[#e8e8e8]">
+                <MediaUploader onUpload={(url, t) => { setCircleMediaUrl(url); setCircleMediaType(t) }} onClear={() => { setCircleMediaUrl(''); setCircleMediaType(undefined) }} mediaUrl={circleMediaUrl} mediaType={circleMediaType} context="circle"/>
+              </div>
+              <div className="flex">
+            <input value={inp} onChange={e => setInp(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMsg()} placeholder="Share your update..." className="flex-1 px-5 py-3.5 text-[14px] outline-none"/>
+              <button onClick={sendMsg} disabled={sending || (!inp.trim() && !circleMediaUrl)} className="px-5 bg-[#111] text-white disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
               </button>
+              </div>
             </div>
           ) : (
             <div className="border-t border-[#e8e8e8] p-4 flex items-center justify-between">

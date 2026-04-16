@@ -116,17 +116,19 @@ ${recentCheckinContext}
 RECENT COACHING:
 ${coachContext}
 
-Generate TODAY's specific task. Rules:
+Generate TODAY's specific task. Critical smart rules:
 - ONE clear, actionable task that takes 30-90 minutes max
 - Must directly advance "${goal.title}"
-- If yesterday's task was NOT completed, make today's task easier/simpler version of it first
+- If yesterday's task was NOT completed, make today's task easier/simpler — address the obstacle
 - If yesterday WAS completed and went well, increase difficulty slightly
+- REST DAY LOGIC: Count recent checkins. If the goal involves physical activity (workout, run, sport, gym, etc.) AND the person has done the activity 3+ days in a row recently, assign a RECOVERY task instead (mobility, rest, nutrition, journaling about form). Never assign hard physical tasks 5+ days in a row without rest.
+- Be smart: if goal is "workout 3x/week" and person has already worked out 3 times this week, give them a rest/recovery or supplementary task
 - Reference the actual goal — not generic advice
-- No markdown, no asterisks, no bullet symbols
-- Format: Start with a direct action verb. Be specific with numbers/times/outcomes.
-- End with: "Why this matters today: [1 sentence connecting to their goal]"
+- Plain text only — no markdown, no asterisks, no dashes
+- Format: Start with a direct action verb. Be specific with numbers/times.
+- End with: "Why this matters today: [1 sentence]"
 
-Output ONLY the task text. No preamble, no "Today's task:", just the task itself.`
+Output ONLY the task text. No label prefix, just the task itself.`
 
   const res = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',

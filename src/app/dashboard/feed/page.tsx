@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
+import MediaUploader from '@/components/dashboard/MediaUploader'
 
 type Profile = { id: string; full_name: string; avatar_url: string; plan: string }
 type Comment = { id: string; post_id: string; user_id: string; content: string; created_at: string; profiles?: Profile }
@@ -142,6 +143,14 @@ function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDele
             </div>
           </div>
           <p className="text-[14px] text-[#111] leading-[1.7]">{post.content}</p>
+          {post.media_url && (
+            <div className="mt-3 rounded-xl overflow-hidden border border-[#f0ede8]">
+              {post.media_type === 'video'
+                ? <video src={post.media_url} controls className="w-full max-h-64 object-cover"/>
+                : <img src={post.media_url} alt="" className="w-full max-h-64 object-cover cursor-pointer" onClick={() => window.open(post.media_url, '_blank')}/>
+              }
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-2.5 border-t border-[#f0ede8] flex items-center gap-5">
@@ -211,6 +220,8 @@ export default function FeedPage() {
   const [content, setContent] = useState('')
   const [postType, setPostType] = useState('general')
   const [visibility, setVisibility] = useState<'public'|'friends'|'private'>('friends')
+  const [mediaUrl, setMediaUrl] = useState('')
+  const [mediaType, setMediaType] = useState<'image'|'video'|undefined>()
   const [selectedGoalId, setSelectedGoalId] = useState('')
   const [feedFilter, setFeedFilter] = useState<'all'|'friends'|'public'>('all')
   const [showArchived, setShowArchived] = useState(false)
@@ -357,10 +368,11 @@ export default function FeedPage() {
     const { data: newPost, error } = await supabase.from('feed_posts').insert({
       user_id: user.id, content: content.trim(), post_type: postType,
       visibility, goal_title: selectedGoal?.title || null, goal_id: selectedGoalId || null,
+      media_url: mediaUrl || null, media_type: mediaType || null,
     }).select('*').single()
     if (error) { toast.error(error.message); setPosting(false); return }
     setPosts(prev => [{ ...newPost, profiles: myProfile, likes_count: 0, user_liked: false, comments: [], comment_count: 0, relevance_score: 999 }, ...prev])
-    setContent(''); setShowCompose(false)
+    setContent(''); setMediaUrl(''); setMediaType(undefined); setShowCompose(false)
     toast.success('Posted!')
     setPosting(false)
   }
@@ -507,6 +519,11 @@ export default function FeedPage() {
                 placeholder="Share your progress, how you're feeling, or a win..."
                 className="w-full text-[14px] border border-[#e8e8e8] rounded-xl px-3.5 py-3 outline-none focus:border-[#111] resize-none leading-[1.6]"
                 rows={3} maxLength={500}/>
+              <MediaUploader
+                onUpload={(url, type) => { setMediaUrl(url); setMediaType(type) }}
+                onClear={() => { setMediaUrl(''); setMediaType(undefined) }}
+                mediaUrl={mediaUrl} mediaType={mediaType} context="post"
+              />
               <div className="flex items-center justify-between mt-2">
                 <span className="text-[11px] text-[#999]">{content.length}/500 · AI moderated</span>
                 <div className="flex gap-2">

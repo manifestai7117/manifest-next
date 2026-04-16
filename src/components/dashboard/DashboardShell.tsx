@@ -15,7 +15,6 @@ const NAV = [
   { href: '/dashboard/feed',    label: 'Feed',       emoji: '◈' },
   { href: '/dashboard/art',     label: 'Vision Art', emoji: '⬡' },
   { href: '/dashboard/streak',  label: 'Streak',     emoji: '⚡' },
-  { href: '/dashboard/print',   label: 'Print Shop', emoji: '⬜' },
   { href: '/dashboard/settings',label: 'Settings',   emoji: '⚙' },
   { href: '/dashboard/profile', label: 'Profile',    emoji: '◯' },
 ]
