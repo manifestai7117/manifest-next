@@ -25,7 +25,6 @@ export default function VisionArtPage() {
   const [printOrdered, setPrintOrdered] = useState<string[]>([])
 
   // Selfie state
-  const [selfiePreview, setSelfiePreview] = useState<string | null>(null)
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
   const [selfiePermission, setSelfiePermission] = useState(false)
   const [uploadingSelfie, setUploadingSelfie] = useState(false)
@@ -46,91 +45,123 @@ export default function VisionArtPage() {
       const g = gs?.find((x: any) => x.id === savedId) || gs?.[0] || null
       setSelectedGoal(g)
       if (g) {
-        const cached = localStorage.getItem(`vb_options_${g.id}`)
-        if (cached) try { const p = JSON.parse(cached); setOptions(p.options || []); setChosenIdx(p.chosen ?? null) } catch {}
-        // Load saved selfie from goal
-        if (g.selfie_url && g.selfie_permission) {
-          setSelfieUrl(g.selfie_url)
-          setSelfiePermission(true)
-        }
+        loadGoalArt(g)
       }
       setLoading(false)
     }
     load()
   }, [])
 
+  // Load saved art options from DB (persists across refreshes)
+  const loadGoalArt = (g: any) => {
+    setSelfieUrl(g.selfie_url || null)
+    setSelfiePermission(g.selfie_permission || false)
+
+    // Try DB-stored options first (most reliable)
+    if (g.vision_options) {
+      try {
+        const saved = JSON.parse(g.vision_options)
+        if (Array.isArray(saved) && saved.length > 0) {
+          setOptions(saved)
+          setChosenIdx(g.vision_chosen_idx ?? null)
+          return
+        }
+      } catch {}
+    }
+    // Fall back to localStorage cache
+    const cached = localStorage.getItem(`vb_options_${g.id}`)
+    if (cached) {
+      try {
+        const p = JSON.parse(cached)
+        setOptions(p.options || [])
+        setChosenIdx(p.chosen ?? null)
+      } catch {}
+    }
+  }
+
   const selectGoal = (g: any) => {
     setSelectedGoal(g)
-    setOptions([]); setChosenIdx(null); setEmailSent(false)
-    const cached = localStorage.getItem(`vb_options_${g.id}`)
-    if (cached) try { const p = JSON.parse(cached); setOptions(p.options || []); setChosenIdx(p.chosen ?? null) } catch {}
+    setOptions([])
+    setChosenIdx(null)
+    setEmailSent(false)
+    loadGoalArt(g)
     localStorage.setItem('selectedGoalId', g.id)
-    // Load selfie for this goal
-    if (g.selfie_url && g.selfie_permission) {
-      setSelfieUrl(g.selfie_url); setSelfiePermission(true)
-    } else {
-      setSelfieUrl(null); setSelfiePermission(false); setSelfiePreview(null)
-    }
   }
 
   const handleSelfie = async (file: File) => {
     if (uploadingSelfie) return
     setUploadingSelfie(true)
-    // Show preview immediately
-    const reader = new FileReader()
-    reader.onload = e => setSelfiePreview(e.target?.result as string)
-    reader.readAsDataURL(file)
     try {
       const form = new FormData()
       form.append('file', file)
       form.append('context', 'selfie')
       const res = await fetch('/api/media', { method: 'POST', body: form })
       const d = await res.json()
-      if (!res.ok) { toast.error(d.error || 'Upload failed'); setSelfiePreview(null); setUploadingSelfie(false); return }
+      if (!res.ok) { toast.error(d.error || 'Upload failed'); setUploadingSelfie(false); return }
       setSelfieUrl(d.url)
       toast.success('Photo uploaded!')
-    } catch { toast.error('Upload failed'); setSelfiePreview(null) }
+    } catch { toast.error('Upload failed') }
     setUploadingSelfie(false)
   }
 
   const saveSelfieToGoal = async () => {
     if (!selectedGoal || !selfieUrl) return
     await supabase.from('goals').update({ selfie_url: selfieUrl, selfie_permission: selfiePermission }).eq('id', selectedGoal.id)
-    await supabase.from('profiles').update({ selfie_url: selfieUrl }).eq('id', profile?.id)
     setSelectedGoal((prev: any) => ({ ...prev, selfie_url: selfieUrl, selfie_permission: selfiePermission }))
     setShowSelfiePanel(false)
-    toast.success(selfiePermission ? 'Photo saved — your vision art will reflect you!' : 'Photo saved (not used in art)')
-  }
-
-  const removeSelfie = async () => {
-    setSelfieUrl(null); setSelfiePreview(null); setSelfiePermission(false)
-    if (selectedGoal) {
-      await supabase.from('goals').update({ selfie_url: null, selfie_permission: false }).eq('id', selectedGoal.id)
-    }
-    toast.success('Photo removed')
+    toast.success(selfiePermission ? 'Photo saved — will be used in vision art' : 'Photo saved')
   }
 
   const generate = async () => {
     if (!selectedGoal || generating) return
-    setGenerating(true); setOptions([]); setChosenIdx(null)
-    const res = await fetch('/api/vision-art/options', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goalId: selectedGoal.id }) })
+    setGenerating(true)
+    setOptions([])
+    setChosenIdx(null)
+
+    const res = await fetch('/api/vision-art/options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goalId: selectedGoal.id }),
+    })
     const data = await res.json()
-    if (res.ok && data.options) {
+
+    if (res.ok && data.options?.length > 0) {
+      const validOptions = data.options.filter((o: any) => o.imageUrl)
+      if (validOptions.length === 0) {
+        toast.error('All images failed to generate. Please try again.')
+        setGenerating(false)
+        return
+      }
       setOptions(data.options)
+
+      // Save to DB for persistence across refreshes
+      await supabase.from('goals').update({
+        vision_options: JSON.stringify(data.options),
+        vision_chosen_idx: null,
+      }).eq('id', selectedGoal.id)
+
+      // Also save to localStorage as backup
       localStorage.setItem(`vb_options_${selectedGoal.id}`, JSON.stringify({ options: data.options, chosen: null }))
-      toast.success('3 vision options ready!')
-    } else toast.error(data.error || 'Generation failed')
+      toast.success(`${validOptions.length} vision${validOptions.length === 1 ? '' : 's'} ready!`)
+    } else {
+      toast.error(data.error || 'Generation failed — please try again')
+    }
     setGenerating(false)
   }
 
   const chooseOption = async (idx: number) => {
     if (!selectedGoal) return
     const chosen = options[idx]
-    if (!chosen?.imageUrl) return
+    if (!chosen?.imageUrl) { toast.error('This image is unavailable — please regenerate'); return }
     setChosenIdx(idx)
     const newCount = (selectedGoal.vision_board_regenerations || 0) + 1
-    await supabase.from('goals').update({ art_image_url: chosen.imageUrl, vision_board_regenerations: newCount }).eq('id', selectedGoal.id)
-    const updated = { ...selectedGoal, art_image_url: chosen.imageUrl, vision_board_regenerations: newCount }
+    await supabase.from('goals').update({
+      art_image_url: chosen.imageUrl,
+      art_title: chosen.label,
+      vision_board_regenerations: newCount,
+      vision_chosen_idx: idx,
+    }).eq('id', selectedGoal.id)
+    const updated = { ...selectedGoal, art_image_url: chosen.imageUrl, art_title: chosen.label, vision_board_regenerations: newCount, vision_chosen_idx: idx }
     setSelectedGoal(updated)
     setGoals(prev => prev.map(g => g.id === selectedGoal.id ? updated : g))
     localStorage.setItem(`vb_options_${selectedGoal.id}`, JSON.stringify({ options, chosen: idx }))
@@ -163,8 +194,8 @@ export default function VisionArtPage() {
   )
 
   const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
-  const hasChosen = chosenIdx !== null && options[chosenIdx]
-  const chosenImage = hasChosen ? options[chosenIdx] : null
+  const hasChosen = chosenIdx !== null && options[chosenIdx]?.imageUrl
+  const chosenImage = hasChosen ? options[chosenIdx!] : null
   const hasSelfie = !!(selfieUrl && selfiePermission)
 
   return (
@@ -174,7 +205,7 @@ export default function VisionArtPage() {
         <div>
           <h1 className="font-serif text-[32px] mb-1">Vision Art & Print Shop</h1>
           <p className="text-[14px] text-[#666]">
-            {hasSelfie ? '✦ Personalised with your photo' : selectedGoal.user_city ? `Personalised for you in ${selectedGoal.user_city}` : 'AI-generated art for your goal'}
+            {hasSelfie ? '✦ Personalised with your photo' : selectedGoal.user_city ? `Personalised for ${selectedGoal.user_city}` : 'AI-generated art for your goal'}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -209,98 +240,60 @@ export default function VisionArtPage() {
         </div>
       )}
 
-      {/* ─── Selfie personalisation panel ──────────────────────── */}
+      {/* Selfie panel */}
       <div className="bg-white border border-[#e8e8e8] rounded-2xl p-4 mb-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {(selfiePreview || selfieUrl) ? (
-              <img src={selfiePreview || selfieUrl || ''} alt="Your photo" className="w-10 h-10 rounded-full object-cover border-2 border-[#b8922a]/30"/>
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-[#f2f0ec] flex items-center justify-center text-[20px]">📸</div>
-            )}
+            {selfieUrl
+              ? <img src={selfieUrl} alt="Your photo" className="w-10 h-10 rounded-full object-cover border-2 border-[#b8922a]/30"/>
+              : <div className="w-10 h-10 rounded-full bg-[#f2f0ec] flex items-center justify-center text-[20px]">📸</div>
+            }
             <div>
-              <p className="text-[13px] font-medium">
-                {hasSelfie ? 'Your photo is being used in vision art' : 'Make art look like you'}
-              </p>
-              <p className="text-[11px] text-[#999]">
-                {hasSelfie ? 'AI will include your likeness in generated images' : 'Upload a selfie to personalise your vision art'}
-              </p>
+              <p className="text-[13px] font-medium">{hasSelfie ? 'Your photo is used in vision art' : 'Make the art look like you'}</p>
+              <p className="text-[11px] text-[#999]">{hasSelfie ? 'AI includes your likeness' : 'Upload a selfie to personalise'}</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowSelfiePanel(!showSelfiePanel)}
-            className="px-3 py-1.5 border border-[#e8e8e8] rounded-xl text-[12px] text-[#666] hover:bg-[#f8f7f5] transition-colors"
-          >
+          <button onClick={() => setShowSelfiePanel(!showSelfiePanel)} className="px-3 py-1.5 border border-[#e8e8e8] rounded-xl text-[12px] text-[#666] hover:bg-[#f8f7f5] transition-colors">
             {showSelfiePanel ? 'Close' : hasSelfie ? 'Change' : 'Add photo'}
           </button>
         </div>
-
         {showSelfiePanel && (
           <div className="mt-4 pt-4 border-t border-[#f0ede8]">
-            <input
-              ref={selfieRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleSelfie(f); e.target.value = '' }}
-            />
-
-            {selfiePreview || selfieUrl ? (
-              <div className="flex items-start gap-4 mb-4">
+            <input ref={selfieRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleSelfie(f); e.target.value = '' }}/>
+            {selfieUrl ? (
+              <div className="flex items-start gap-4">
                 <div className="relative">
-                  <img src={selfiePreview || selfieUrl || ''} alt="Preview" className="w-20 h-20 rounded-2xl object-cover"/>
-                  {uploadingSelfie && (
-                    <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center">
-                      <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin-anim"/>
-                    </div>
-                  )}
+                  <img src={selfieUrl} alt="" className="w-20 h-20 rounded-2xl object-cover"/>
+                  {uploadingSelfie && <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center"><span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin-anim"/></div>}
                 </div>
                 <div className="flex-1">
                   <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-xl p-3 mb-3">
                     <label className="flex items-start gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selfiePermission}
-                        onChange={e => setSelfiePermission(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 accent-[#b8922a]"
-                      />
-                      <span className="text-[12px] text-[#666] leading-[1.5]">
-                        I give permission for my photo to be used to create AI vision art. My photo is only used for art generation and is never shared publicly.
-                      </span>
+                      <input type="checkbox" checked={selfiePermission} onChange={e => setSelfiePermission(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#b8922a]"/>
+                      <span className="text-[12px] text-[#666] leading-[1.5]">I allow my photo to be used for AI vision art generation. It will not be shared publicly.</span>
                     </label>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={saveSelfieToGoal} disabled={uploadingSelfie}
-                      className="px-4 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium hover:bg-[#2a2a2a] disabled:opacity-40 transition-colors">
-                      Save
-                    </button>
-                    <button onClick={() => selfieRef.current?.click()} disabled={uploadingSelfie}
-                      className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[12px] text-[#666] hover:bg-[#f8f7f5] transition-colors">
-                      Change photo
-                    </button>
-                    <button onClick={removeSelfie}
-                      className="px-4 py-2 border border-red-100 text-red-400 rounded-xl text-[12px] hover:bg-red-50 transition-colors">
-                      Remove
-                    </button>
+                    <button onClick={saveSelfieToGoal} disabled={uploadingSelfie} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium hover:bg-[#2a2a2a] disabled:opacity-40 transition-colors">Save</button>
+                    <button onClick={() => selfieRef.current?.click()} className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[12px] text-[#666] hover:bg-[#f8f7f5] transition-colors">Change</button>
+                    <button onClick={async () => { setSelfieUrl(null); setSelfiePermission(false); await supabase.from('goals').update({ selfie_url: null, selfie_permission: false }).eq('id', selectedGoal.id) }} className="px-4 py-2 border border-red-100 text-red-400 rounded-xl text-[12px] hover:bg-red-50 transition-colors">Remove</button>
                   </div>
                 </div>
               </div>
             ) : (
-              <button
-                onClick={() => selfieRef.current?.click()}
-                disabled={uploadingSelfie}
-                className="w-full py-4 border-2 border-dashed border-[#e8e8e8] rounded-2xl flex flex-col items-center gap-2 hover:border-[#b8922a]/40 transition-colors"
-              >
+              <button onClick={() => selfieRef.current?.click()} disabled={uploadingSelfie}
+                className="w-full py-4 border-2 border-dashed border-[#e8e8e8] rounded-2xl flex flex-col items-center gap-2 hover:border-[#b8922a]/40 transition-colors">
                 <div className="text-[28px]">📸</div>
-                <p className="text-[13px] font-medium text-[#111]">Upload a selfie or photo</p>
-                <p className="text-[11px] text-[#999]">JPG, PNG or WebP · Max 10MB</p>
+                <p className="text-[13px] font-medium">Upload a selfie or photo</p>
+                <p className="text-[11px] text-[#999]">JPG, PNG or WebP — max 10MB</p>
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* Tabs */}
+      {/* Art / Print tabs */}
       <div className="flex gap-1 p-1 bg-[#f2f0ec] rounded-xl mb-5 w-fit">
         <button onClick={() => setTab('art')} className={`px-5 py-2 rounded-lg text-[13px] font-medium transition-all ${tab === 'art' ? 'bg-white shadow-sm text-[#111]' : 'text-[#666]'}`}>✦ Vision Art</button>
         <button onClick={() => setTab('print')} className={`px-5 py-2 rounded-lg text-[13px] font-medium transition-all ${tab === 'print' ? 'bg-white shadow-sm text-[#111]' : 'text-[#666]'}`}>🖼 Print Shop</button>
@@ -325,26 +318,44 @@ export default function VisionArtPage() {
                 <p className="text-[11px] font-bold tracking-[.14em] uppercase text-[#999]">{chosenIdx === null ? '✦ Choose your vision' : '✦ Suggested visions'}</p>
                 <div className="h-px flex-1 bg-[#e8e8e8]"/>
               </div>
-              <div className={`grid gap-4 mb-6 ${options.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+
+              {/* Portrait grid — 3 columns, portrait aspect ratio */}
+              <div className="grid grid-cols-3 gap-3 mb-6">
                 {options.map((opt, i) => (
-                  <div key={i} onClick={() => chooseOption(i)}
-                    className={`rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${chosenIdx === i ? 'ring-4 ring-[#b8922a] shadow-2xl scale-[1.02]' : chosenIdx !== null ? 'opacity-40 hover:opacity-60' : 'hover:shadow-xl hover:scale-[1.01]'}`}>
-                    <div className="relative" style={{ aspectRatio: '3/4' }}>
-                      {opt.imageUrl
-                        ? <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover"/>
-                        : <div className="w-full h-full bg-[#f0ede8] flex items-center justify-center"><p className="text-[#999] text-[13px]">Unavailable</p></div>
-                      }
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4">
-                        <p className="font-serif italic text-white text-[16px] leading-tight">{opt.label}</p>
-                        <p className="text-white/50 text-[11px] mt-1">{opt.description}</p>
+                  <div key={i} onClick={() => opt.imageUrl ? chooseOption(i) : toast.error('Image unavailable — please regenerate')}
+                    className={`rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${chosenIdx === i ? 'ring-4 ring-[#b8922a] shadow-2xl scale-[1.02]' : chosenIdx !== null ? 'opacity-50 hover:opacity-70' : 'hover:shadow-xl hover:scale-[1.01]'}`}>
+                    {/* Portrait aspect ratio 2:3 */}
+                    <div className="relative" style={{ aspectRatio: '2/3' }}>
+                      {opt.imageUrl ? (
+                        <img
+                          src={opt.imageUrl}
+                          alt={opt.label}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Image failed to load — show unavailable state
+                            const target = e.target as HTMLImageElement
+                            target.style.display = 'none'
+                            target.nextElementSibling?.classList.remove('hidden')
+                          }}
+                        />
+                      ) : null}
+                      {/* Fallback for broken/missing images */}
+                      <div className={`${opt.imageUrl ? 'hidden' : 'flex'} absolute inset-0 bg-[#1a1a2e] items-center justify-center flex-col gap-2`}>
+                        <p className="text-white/40 text-[13px]">Unavailable</p>
+                        <button onClick={(e) => { e.stopPropagation(); generate() }} className="text-[11px] text-[#b8922a] underline">Regenerate</button>
                       </div>
-                      {chosenIdx === i && <div className="absolute top-3 right-3 bg-[#b8922a] text-white text-[11px] font-bold px-3 py-1.5 rounded-full">✓ Selected</div>}
-                      {chosenIdx === null && <div className="absolute top-3 left-3 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white text-[13px] font-bold">{String.fromCharCode(65 + i)}</div>}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3">
+                        <p className="font-serif italic text-white text-[14px] leading-tight">{opt.label}</p>
+                        <p className="text-white/50 text-[10px] mt-0.5 line-clamp-2">{opt.description}</p>
+                      </div>
+                      {chosenIdx === i && <div className="absolute top-2 right-2 bg-[#b8922a] text-white text-[10px] font-bold px-2 py-1 rounded-full">✓ Selected</div>}
+                      {chosenIdx === null && <div className="absolute top-2 left-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center text-white text-[12px] font-bold">{String.fromCharCode(65 + i)}</div>}
                     </div>
                   </div>
                 ))}
               </div>
 
+              {/* Chosen detail */}
               {chosenImage && (
                 <>
                   <div className="flex items-center gap-3 my-5">
@@ -353,7 +364,8 @@ export default function VisionArtPage() {
                     <div className="h-px flex-1 bg-[#e8e8e8]"/>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="rounded-2xl overflow-hidden shadow-2xl" style={{ aspectRatio: '4/5' }}>
+                    {/* Portrait image */}
+                    <div className="rounded-2xl overflow-hidden shadow-2xl mx-auto w-full max-w-[300px]" style={{ aspectRatio: '2/3' }}>
                       <img src={chosenImage.imageUrl} alt={chosenImage.label} className="w-full h-full object-cover"/>
                     </div>
                     <div className="space-y-4">
@@ -367,7 +379,7 @@ export default function VisionArtPage() {
                         <p className="font-serif italic text-[15px] text-[#111] leading-[1.65]">"{selectedGoal.affirmation}"</p>
                       </div>
                       <button onClick={() => setTab('print')} className="w-full py-3 border-2 border-dashed border-[#b8922a]/40 text-[#b8922a] text-[13px] font-medium rounded-2xl hover:border-[#b8922a] transition-colors">
-                        🖼 Order a print of this →
+                        🖼 Order a print →
                       </button>
                     </div>
                   </div>
@@ -381,9 +393,9 @@ export default function VisionArtPage() {
               <p className="text-[48px] mb-4">✦</p>
               <p className="font-serif text-[20px] mb-2">Your vision awaits</p>
               <p className="text-[13px] text-[#999] max-w-[280px] mx-auto mb-6 leading-[1.7]">
-                Generate 3 personalised AI images for your goal{hasSelfie ? ' — including your likeness' : ''}
+                Generate 3 personalised AI portrait images for your goal{hasSelfie ? ' — featuring your likeness' : ''}
               </p>
-              <button onClick={generate} disabled={generating} className="px-6 py-3 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">✦ Generate my vision art</button>
+              <button onClick={generate} className="px-6 py-3 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">✦ Generate my vision art</button>
             </div>
           )}
         </>
@@ -404,11 +416,10 @@ export default function VisionArtPage() {
           )}
           {(selectedGoal?.art_image_url || hasChosen) && (
             <div className="flex items-start gap-4 bg-[#111] rounded-2xl p-4 mb-5">
-              <img src={hasChosen ? options[chosenIdx!]?.imageUrl : selectedGoal.art_image_url} alt="" className="w-20 h-24 object-cover rounded-xl flex-shrink-0"/>
+              <img src={hasChosen ? options[chosenIdx!]?.imageUrl : selectedGoal.art_image_url} alt="" className="w-16 h-24 object-cover rounded-xl flex-shrink-0"/>
               <div>
                 <p className="text-[11px] text-white/40 uppercase tracking-[.1em] mb-1">Printing this vision</p>
                 <p className="font-serif italic text-white text-[16px]">{hasChosen ? options[chosenIdx!]?.label : selectedGoal.art_title || selectedGoal.title}</p>
-                <p className="text-[12px] text-white/40 mt-1">{selectedGoal.title}</p>
               </div>
             </div>
           )}

@@ -27,12 +27,12 @@ type Post = {
 }
 
 const TYPE_CFG: Record<string, { emoji: string; color: string; bg: string }> = {
-  achievement: { emoji: 'ðŸ†', color: 'text-yellow-700', bg: 'bg-yellow-50' },
-  checkin:     { emoji: 'âœ…', color: 'text-green-700',  bg: 'bg-green-50'  },
-  goal_start:  { emoji: 'ðŸŽ¯', color: 'text-blue-700',   bg: 'bg-blue-50'   },
+  achievement: { emoji: '🏆', color: 'text-yellow-700', bg: 'bg-yellow-50' },
+  checkin:     { emoji: '✅', color: 'text-green-700',  bg: 'bg-green-50'  },
+  goal_start:  { emoji: '🎯', color: 'text-blue-700',   bg: 'bg-blue-50'   },
   feeling:     { emoji: '💭', color: 'text-purple-700', bg: 'bg-purple-50' },
   reward:      { emoji: '⭐', color: 'text-[#b8922a]',  bg: 'bg-[#faf3e0]' },
-  milestone:   { emoji: 'ðŸš€', color: 'text-indigo-700', bg: 'bg-indigo-50' },
+  milestone:   { emoji: '🚀', color: 'text-indigo-700', bg: 'bg-indigo-50' },
   general:     { emoji: '📝', color: 'text-[#666]',     bg: 'bg-[#f8f7f5]' },
 }
 const POST_TYPES = [
@@ -126,7 +126,7 @@ function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDele
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-[14px] font-semibold">{post.profiles?.full_name}</p>
                 <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${tc.bg} ${tc.color}`}>{tc.emoji} {POST_TYPES.find(t => t.v === post.post_type)?.l}</span>
-                {post.goal_title && <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full max-w-[120px] truncate">ðŸŽ¯ {post.goal_title}</span>}
+                {post.goal_title && <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full max-w-[120px] truncate">🎯 {post.goal_title}</span>}
                 <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${visibilityBadge.cls}`}>{visibilityBadge.label}</span>
                 {post.is_archived && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f2f0ec] text-[#999]">📦 Archived</span>}
               </div>
@@ -524,7 +524,7 @@ export default function FeedPage() {
               {goals.length > 0 && (
                 <select value={selectedGoalId} onChange={e => setSelectedGoalId(e.target.value)}
                   className="w-full text-[12px] border border-[#e8e8e8] rounded-xl px-3 py-2 outline-none focus:border-[#111] mb-2 text-[#666]">
-                  <option value="">ðŸŽ¯ Tag a goal (optional)</option>
+                  <option value="">🎯 Tag a goal (optional)</option>
                   {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
                 </select>
               )}
