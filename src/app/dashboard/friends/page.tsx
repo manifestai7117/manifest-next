@@ -174,7 +174,11 @@ export default function FriendsPage() {
     await supabase.from('blocked_users').upsert({ blocker_id: user.id, blocked_id: blockedId })
     await supabase.from('friendships').delete()
       .or(`and(requester.eq.${user.id},addressee.eq.${blockedId}),and(requester.eq.${blockedId},addressee.eq.${user.id})`)
-    setBlockedIds(prev => new Set([...prev, blockedId]))
+    setBlockedIds(prev => {
+      const next = new Set(prev)
+      next.add(blockedId)
+      return next
+    })
     setUsers(prev => prev.filter(u => u.id !== blockedId))
     setFriends(prev => prev.filter((f: any) => f.id !== blockedId))
     if (activeChat?.id === blockedId) setActiveChat(null)
