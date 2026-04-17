@@ -21,7 +21,7 @@ export async function GET() {
       .order('created_at', { ascending: false })
       .limit(20)
 
-    const actorIds = [...new Set((data || []).map((n: any) => n.actor_id).filter(Boolean))]
+    const actorIds = Array.from(new Set((data || []).map((n: any) => n.actor_id).filter(Boolean)))
     let actorMap: Record<string, any> = {}
     if (actorIds.length > 0) {
       const { data: actors } = await serviceSupabase
