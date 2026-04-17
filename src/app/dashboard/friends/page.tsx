@@ -128,13 +128,20 @@ export default function FriendsPage() {
     return () => { supabase.removeChannel(channel) }
   }, [user])
 
+  const notify = async (userId: string, type: string, title: string, body?: string, link?: string) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, type, title, body, link }),
+      })
+    } catch {}
+  }
+
   const sendRequest = async (addresseeId: string) => {
     const { error } = await supabase.from('friendships').insert({ requester: user.id, addressee: addresseeId, status: 'pending' })
     if (error) { toast.error('Could not send request'); return }
-    await supabase.from('notifications').insert({
-      user_id: addresseeId, actor_id: user.id, type: 'friend_request',
-      title: 'New friend request', body: 'Wants to connect with you', link: '/dashboard/friends',
-    })
+    await notify(addresseeId, 'friend_request', 'New friend request', 'Wants to connect with you', '/dashboard/friends')
     setUsers(prev => prev.map(u => u.id === addresseeId ? { ...u, isPending: true } : u))
     toast.success('Friend request sent!')
   }
@@ -171,10 +178,7 @@ export default function FriendsPage() {
   const acceptRequest = async (friendshipId: string, fromUser: any) => {
     const { error } = await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId)
     if (error) { toast.error('Could not accept'); return }
-    await supabase.from('notifications').insert({
-      user_id: fromUser.id, actor_id: user.id, type: 'friend_accept',
-      title: 'Friend request accepted!', body: 'You are now connected', link: '/dashboard/friends',
-    })
+    await notify(fromUser.id, 'friend_accept', 'Friend request accepted!', 'You are now connected', '/dashboard/friends')
     setRequests(prev => prev.filter((r: any) => r.friendshipId !== friendshipId))
     setFriends(prev => [...prev, fromUser])
     setUsers(prev => prev.filter(u => u.id !== fromUser.id))
@@ -229,10 +233,7 @@ export default function FriendsPage() {
     setDmMediaUrl(''); setDmMediaType(undefined)
     if (msg) {
       setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg])
-      await supabase.from('notifications').insert({
-        user_id: activeChat.id, actor_id: user.id, type: 'comment',
-        title: 'New message', body: content ? content.slice(0, 80) : '📎 Sent media', link: '/dashboard/friends',
-      })
+      await notify(activeChat.id, 'comment', 'New message', content ? content.slice(0, 80) : 'Sent you media', '/dashboard/friends')
     }
     setSending(false)
   }
