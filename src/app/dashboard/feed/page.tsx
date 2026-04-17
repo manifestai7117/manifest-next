@@ -159,8 +159,8 @@ function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDele
           {post.media_url && (
             <div className="mt-3 rounded-xl overflow-hidden border border-[#f0ede8]">
               {post.media_type === 'video'
-                ? <video src={post.media_url} controls className="w-full max-h-64 object-cover"/>
-                : <img src={post.media_url} alt="" className="w-full max-h-64 object-cover cursor-pointer" onClick={() => window.open(post.media_url, '_blank')}/>
+                ? <video src={post.media_url} controls className="w-full max-h-[600px] object-contain rounded-lg bg-black"/>
+                : <img src={post.media_url} alt="" className="w-full max-h-[600px] object-contain bg-black/5 rounded-lg cursor-pointer" onClick={() => window.open(post.media_url, '_blank')}/>
               }
             </div>
           )}

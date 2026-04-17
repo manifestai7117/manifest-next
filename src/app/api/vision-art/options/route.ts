@@ -11,49 +11,30 @@ const serviceSupabase = createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Download a DALL-E image URL and save it to Supabase Storage permanently.
-// DALL-E URLs expire after ~1 hour — this is the ONLY reliable way to persist them.
+// Immediately download DALL-E temp URL → Supabase Storage (permanent, never expires)
 async function persistImage(tempUrl: string, goalId: string, idx: number): Promise<string> {
   try {
     const res = await fetch(tempUrl, { signal: AbortSignal.timeout(30000) })
-    if (!res.ok) return tempUrl // fallback to temp URL
-
-    const arrayBuffer = await res.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    if (!res.ok) return tempUrl
+    const buffer = Buffer.from(await res.arrayBuffer())
     const filename = `vision-art/${goalId}/option-${idx}-${Date.now()}.png`
-
-    const { data, error } = await serviceSupabase.storage
+    const { error } = await serviceSupabase.storage
       .from('user-media')
-      .upload(filename, buffer, {
-        contentType: 'image/png',
-        upsert: true,
-        cacheControl: '31536000', // 1 year cache
-      })
-
-    if (error) {
-      console.error('Storage upload error:', error)
-      return tempUrl // fallback
-    }
-
-    const { data: { publicUrl } } = serviceSupabase.storage
-      .from('user-media')
-      .getPublicUrl(filename)
-
+      .upload(filename, buffer, { contentType: 'image/png', upsert: true, cacheControl: '31536000' })
+    if (error) { console.error('Storage upload error:', error); return tempUrl }
+    const { data: { publicUrl } } = serviceSupabase.storage.from('user-media').getPublicUrl(filename)
     return publicUrl
   } catch (e) {
     console.error('persistImage error:', e)
-    return tempUrl // fallback to temp URL
+    return tempUrl
   }
 }
 
-async function generateImage(prompt: string): Promise<string | null> {
+async function generateDalleImage(prompt: string): Promise<string | null> {
   try {
     const res = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: 'dall-e-3',
         prompt: prompt.slice(0, 4000),
@@ -64,15 +45,11 @@ async function generateImage(prompt: string): Promise<string | null> {
       }),
       signal: AbortSignal.timeout(55000),
     })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      console.error('DALL-E error:', JSON.stringify(err))
-      return null
-    }
+    if (!res.ok) { console.error('DALL-E error:', await res.text()); return null }
     const data = await res.json()
     return data.data?.[0]?.url ?? null
   } catch (e: any) {
-    console.error('generateImage error:', e.message)
+    console.error('DALL-E fetch error:', e.message)
     return null
   }
 }
@@ -88,119 +65,120 @@ export async function POST(request: Request) {
       .from('goals').select('*').eq('id', goalId).eq('user_id', user.id).single()
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
 
-    // Person description for the prompt
-    const parts = [
+    const personParts = [
       goal.user_gender && goal.user_gender !== 'Prefer not to say' ? goal.user_gender.toLowerCase() : null,
       goal.user_age ? `${goal.user_age}-year-old` : null,
       goal.user_ethnicity && goal.user_ethnicity !== 'Prefer not to say' ? goal.user_ethnicity : null,
     ].filter(Boolean)
-    const personDesc = parts.length > 0 ? parts.join(' ') : 'person'
-    const cityDesc = goal.user_city ? `in ${goal.user_city}` : ''
+    const personDesc = personParts.length > 0 ? personParts.join(' ') : 'person'
+    const city = goal.user_city || 'the city'
+    const aesthetic = goal.aesthetic || 'Bold & dark'
 
-    // Step 1: Generate scene concepts with Haiku (fast, < 5s)
+    const aestheticStyle = {
+      'Bold & dark': 'dramatic chiaroscuro lighting, deep shadows, high contrast, cinematic',
+      'Warm & natural': 'golden hour light, warm earth tones, soft shadows, organic textures',
+      'Minimal & clean': 'clean natural light, minimal composition, airy negative space, calm',
+      'Bright & energetic': 'vibrant saturated colors, dynamic angles, kinetic energy, bold',
+    }[aesthetic] || 'cinematic, dramatic lighting'
+
+    // Step 1: Generate 3 DISTINCT concept types with Claude Haiku
     const conceptRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 900,
+      max_tokens: 1000,
       messages: [{
         role: 'user',
-        content: `Create 3 distinct vision board scene concepts for this goal.
+        content: `Create 3 vision board images for this goal. Each image must be a COMPLETELY DIFFERENT visual type.
 
 GOAL: "${goal.title}"
 WHY: ${goal.why || 'personal growth'}
-AESTHETIC: ${goal.aesthetic || 'Bold & dark'}
-PERSON: ${personDesc} ${cityDesc}
-STREAK: ${goal.streak || 0} days
+PERSON: ${personDesc} in ${city}
+AESTHETIC: ${aesthetic} — ${aestheticStyle}
 
-Rules:
-- Each concept must be COMPLETELY different: different setting, time of day, mood, composition
-- Show the moment AFTER achieving the goal — victory, not struggle
-- Subject shown from mid-distance or behind, never close-up portrait (avoids AI face issues)
-- Hyper-specific and cinematic — real places, real lighting, real feelings
-- ${goal.aesthetic === 'Bold & dark' ? 'Dramatic chiaroscuro, deep shadows, high contrast' : ''}
-- ${goal.aesthetic === 'Warm & natural' ? 'Golden hour, earth tones, organic textures' : ''}
-- ${goal.aesthetic === 'Minimal & clean' ? 'Clean natural light, negative space, calm geometry' : ''}
-- ${goal.aesthetic === 'Bright & energetic' ? 'Vibrant colour, dynamic angles, kinetic energy' : ''}
+IMPORTANT — The 3 images MUST follow these exact types:
+1. PERSON IMAGE: A ${personDesc} silhouette or figure (shown from behind or mid-distance, never a portrait face) in the moment of achieving this goal. Real location, golden moment, powerful.
+2. ACTIVITY IMAGE: The specific activity, equipment, environment, or practice involved in achieving this goal — NO person at all. Just the scene, tools, or setting.
+3. SYMBOLIC IMAGE: An abstract or symbolic visual metaphor representing the essence of this goal — could be nature, architecture, light, patterns, or objects. Conceptual, not literal. NO person.
 
-Return ONLY valid JSON — no markdown, no explanation:
-[{"label":"3-5 word title","description":"one vivid sentence describing the emotional moment","dallePrompt":"100-word DALL-E 3 prompt: start with the shot type and lighting, describe the exact scene, person, environment, mood; end with: photorealistic, cinematic, 8K resolution, no text, no watermarks"}]`,
+Return ONLY valid JSON array, no markdown:
+[
+  {"type":"person","label":"3-5 word title","description":"one sentence","dallePrompt":"detailed DALL-E prompt, portrait orientation 1024x1792, ${aestheticStyle}, photorealistic, 8K, no text"},
+  {"type":"activity","label":"3-5 word title","description":"one sentence","dallePrompt":"detailed DALL-E prompt focusing on the activity/scene/equipment without any person, portrait orientation, ${aestheticStyle}, photorealistic, 8K, no text"},
+  {"type":"symbolic","label":"3-5 word title","description":"one sentence","dallePrompt":"detailed symbolic/metaphorical DALL-E prompt with no person at all, abstract or nature-based visual, portrait orientation, ${aestheticStyle}, photorealistic, 8K, no text"}
+]`,
       }],
     })
 
     let concepts: any[] = []
     try {
       const raw = conceptRes.content[0].type === 'text' ? conceptRes.content[0].text : '[]'
-      const cleaned = raw.replace(/```json|```/g, '').trim()
-      concepts = JSON.parse(cleaned)
-      if (!Array.isArray(concepts) || concepts.length === 0) throw new Error('empty')
-      // Ensure we have exactly 3
-      while (concepts.length < 3) {
-        concepts.push({ label: `Vision ${concepts.length + 1}`, description: goal.title, dallePrompt: `A ${personDesc} achieving their goal of ${goal.title}, photorealistic, cinematic, 8K` })
-      }
-    } catch (e) {
-      console.error('Concept parse error:', e)
-      // Generate generic concepts as fallback
-      concepts = [1, 2, 3].map(i => ({
-        label: `Vision ${i}`,
-        description: `Achieving: ${goal.title}`,
-        dallePrompt: `A ${personDesc} ${cityDesc} at the moment of achieving their goal: ${goal.title}. Scene ${i} of 3. Photorealistic, cinematic, 8K resolution, no text`,
-      }))
+      concepts = JSON.parse(raw.replace(/```json|```/g, '').trim())
+      if (!Array.isArray(concepts) || concepts.length < 3) throw new Error('not 3')
+    } catch {
+      // Fallback concepts if Claude fails
+      concepts = [
+        {
+          type: 'person',
+          label: 'The Victory Moment',
+          description: `Achieving: ${goal.title}`,
+          dallePrompt: `A ${personDesc} silhouette viewed from behind standing triumphantly in ${city}, having achieved ${goal.title}. ${aestheticStyle}, photorealistic, 8K, no text, no watermarks`,
+        },
+        {
+          type: 'activity',
+          label: 'The Practice',
+          description: `The work behind: ${goal.title}`,
+          dallePrompt: `The environment, tools, and setting associated with ${goal.title} in ${city}, no people, showing the space and equipment beautifully. ${aestheticStyle}, photorealistic, 8K, no text, no watermarks`,
+        },
+        {
+          type: 'symbolic',
+          label: 'The Essence',
+          description: `Symbol of: ${goal.title}`,
+          dallePrompt: `Abstract symbolic visual metaphor for ${goal.title}. Natural elements, light, or geometric forms conveying the feeling of this achievement. No people. ${aestheticStyle}, photorealistic, 8K, no text, no watermarks`,
+        },
+      ]
     }
 
-    const personNote = personDesc !== 'person' ? `The person in the scene is ${personDesc}.` : ''
-
-    // Step 2: Generate ALL 3 images in parallel — MUST succeed, retry once if fail
+    // Step 2: Generate all 3 images in parallel, with stagger + retry
     const generateWithRetry = async (prompt: string, idx: number): Promise<string | null> => {
-      // Small stagger to avoid rate limits
-      await new Promise(r => setTimeout(r, idx * 600))
-      let url = await generateImage(prompt)
+      await new Promise(r => setTimeout(r, idx * 700)) // stagger to avoid rate limits
+      let url = await generateDalleImage(prompt)
       if (!url) {
-        // Retry once after 2 seconds
-        console.log(`Image ${idx} failed, retrying...`)
-        await new Promise(r => setTimeout(r, 2000))
-        url = await generateImage(prompt)
+        console.log(`Image ${idx} failed on first try, retrying after 3s...`)
+        await new Promise(r => setTimeout(r, 3000))
+        url = await generateDalleImage(prompt)
       }
       return url
     }
 
-    const imagePromises = concepts.map(async (concept: any, i: number) => {
-      const prompt = [concept.dallePrompt, personNote].filter(Boolean).join(' ')
-      const tempUrl = await generateWithRetry(prompt, i)
+    const results = await Promise.all(
+      concepts.slice(0, 3).map(async (concept: any, i: number) => {
+        const tempUrl = await generateWithRetry(concept.dallePrompt, i)
+        // Immediately persist to Supabase Storage — DALL-E URLs expire in ~1 hour
+        const permanentUrl = tempUrl ? await persistImage(tempUrl, goalId, i) : null
+        return {
+          label: concept.label || `Vision ${i + 1}`,
+          description: concept.description || '',
+          type: concept.type || ['person', 'activity', 'symbolic'][i],
+          imageUrl: permanentUrl,
+        }
+      })
+    )
 
-      let permanentUrl: string | null = null
-      if (tempUrl) {
-        // CRITICAL: Immediately persist to Supabase Storage before URL expires
-        permanentUrl = await persistImage(tempUrl, goalId, i)
-      }
-
-      return {
-        label: concept.label || `Vision ${i + 1}`,
-        description: concept.description || '',
-        imageUrl: permanentUrl, // permanent Supabase URL — never expires
-      }
-    })
-
-    const options = await Promise.all(imagePromises)
-
-    // Count successful images
-    const successCount = options.filter(o => o.imageUrl).length
-    console.log(`Generated ${successCount}/3 images for goal ${goalId}`)
+    const successCount = results.filter(r => r.imageUrl).length
+    console.log(`Vision art: ${successCount}/3 generated for goal ${goalId}`)
 
     if (successCount === 0) {
-      return NextResponse.json({
-        error: 'Image generation failed. DALL-E may be overloaded — please try again in a moment.',
-        options: [],
-      }, { status: 500 })
+      return NextResponse.json({ error: 'Image generation failed. Please try again in a moment.', options: [] }, { status: 500 })
     }
 
-    // Save options (with permanent URLs) to DB immediately
+    // Save to DB (permanent URLs — never expire)
     await serviceSupabase.from('goals').update({
-      vision_options: JSON.stringify(options),
+      vision_options: JSON.stringify(results),
       vision_chosen_idx: null,
     }).eq('id', goalId)
 
-    return NextResponse.json({ options, successCount })
+    return NextResponse.json({ options: results, successCount })
   } catch (error: any) {
-    console.error('Vision art route error:', error)
+    console.error('Vision art error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

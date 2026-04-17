@@ -174,11 +174,7 @@ export default function FriendsPage() {
     await supabase.from('blocked_users').upsert({ blocker_id: user.id, blocked_id: blockedId })
     await supabase.from('friendships').delete()
       .or(`and(requester.eq.${user.id},addressee.eq.${blockedId}),and(requester.eq.${blockedId},addressee.eq.${user.id})`)
-    setBlockedIds(prev => {
-      const next = new Set(prev)
-      next.add(blockedId)
-      return next
-    })
+    setBlockedIds(prev => new Set([...prev, blockedId]))
     setUsers(prev => prev.filter(u => u.id !== blockedId))
     setFriends(prev => prev.filter((f: any) => f.id !== blockedId))
     if (activeChat?.id === blockedId) setActiveChat(null)
@@ -290,9 +286,7 @@ export default function FriendsPage() {
                       ? <button onClick={() => cancelRequest(u.id)} className="text-[11px] font-medium text-[#b8922a] bg-[#faf3e0] px-3 py-1.5 rounded-full hover:bg-[#f5e8c8]">Pending ✕</button>
                       : <button onClick={() => sendRequest(u.id)} className="px-3 py-1.5 bg-[#111] text-white rounded-lg text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors">+ Add</button>
                     }
-                    <button onClick={() => setBlockModal(u)} title="Block" className="w-7 h-7 flex items-center justify-center text-[#ccc] hover:text-red-400 rounded-full transition-colors">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                    </button>
+                    <button onClick={() => setBlockModal(u)} className="px-3 py-1.5 border border-[#e8e8e8] rounded-lg text-[12px] text-[#999] hover:border-red-200 hover:text-red-500 transition-colors">Block</button>
                   </div>
                 </div>
               ))
