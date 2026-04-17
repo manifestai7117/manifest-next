@@ -127,22 +127,19 @@ export default function VisionArtPage() {
 
     if (res.ok && data.options?.length > 0) {
       const validOptions = data.options.filter((o: any) => o.imageUrl)
-      if (validOptions.length === 0) {
-        toast.error('All images failed to generate. Please try again.')
-        setGenerating(false)
-        return
-      }
       setOptions(data.options)
-
-      // Save to DB for persistence across refreshes
-      await supabase.from('goals').update({
-        vision_options: JSON.stringify(data.options),
-        vision_chosen_idx: null,
-      }).eq('id', selectedGoal.id)
-
+      // DB is already saved by the API route (with permanent URLs)
       // Also save to localStorage as backup
       localStorage.setItem(`vb_options_${selectedGoal.id}`, JSON.stringify({ options: data.options, chosen: null }))
-      toast.success(`${validOptions.length} vision${validOptions.length === 1 ? '' : 's'} ready!`)
+      // Update local goal state
+      setSelectedGoal((prev: any) => ({ ...prev, vision_options: JSON.stringify(data.options), vision_chosen_idx: null }))
+      if (validOptions.length === 3) {
+        toast.success('3 visions ready! Choose your favourite.')
+      } else if (validOptions.length > 0) {
+        toast.success(`${validOptions.length}/3 visions ready — click Regenerate to retry any unavailable ones`)
+      } else {
+        toast.error('Generation failed — please try again')
+      }
     } else {
       toast.error(data.error || 'Generation failed — please try again')
     }

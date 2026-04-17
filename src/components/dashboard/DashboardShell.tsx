@@ -96,7 +96,7 @@ export default function DashboardShell({ children, profile }: { children: React.
         {!isPro && (
           <Link href="/dashboard/upgrade"
             className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#faf3e0] rounded-xl text-[11px] font-medium text-[#b8922a] hover:bg-[#f5e8c0] transition-colors">
-            â˜… Upgrade to Pro
+            ★ Upgrade to Pro
           </Link>
         )}
         <Link href="/dashboard/profile"
@@ -148,7 +148,7 @@ export default function DashboardShell({ children, profile }: { children: React.
         </Link>
         <div className="flex items-center gap-3">
           <NotificationBell />
-          {/* Hamburger â€” three lines, perfectly aligned right */}
+          {/* Hamburger — three lines, perfectly aligned right */}
           <button
             onClick={() => setMobileOpen(true)}
             className="flex flex-col justify-center items-end gap-[5px] w-6 h-6"
@@ -188,7 +188,7 @@ export default function DashboardShell({ children, profile }: { children: React.
         <button
           onClick={() => setMobileOpen(true)}
           className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[#bbb]">
-          <span className="text-[16px] leading-none opacity-50">â˜°</span>
+          <span className="text-[16px] leading-none opacity-50">☰</span>
           <span className="text-[9px] font-medium">More</span>
         </button>
       </nav>

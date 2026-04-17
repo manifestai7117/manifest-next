@@ -44,7 +44,7 @@ export default function CoachPage() {
     if (history?.length) {
       setMsgs(history)
     } else {
-      setMsgs([{ role: 'assistant', content: `I'm your Manifest coach for "${g.title}". I know your why, your obstacles, and your progress. Before we dive in â€” what did you actually do toward this goal yesterday?` }])
+      setMsgs([{ role: 'assistant', content: `I'm your Manifest coach for "${g.title}". I know your why, your obstacles, and your progress. Before we dive in — what did you actually do toward this goal yesterday?` }])
     }
     const res = await fetch(`/api/coach?goalId=${g.id}`)
     const data = await res.json()
@@ -183,9 +183,9 @@ export default function CoachPage() {
       {needsYesterdayLog && yesterdayTask && (
         <div className="bg-[#111] rounded-2xl p-5 mb-4 border border-[#b8922a]/30">
           <div className="flex items-start gap-3 mb-4">
-            <span className="text-[24px]">ðŸ“‹</span>
+            <span className="text-[24px]">📋</span>
             <div>
-              <p className="font-medium text-white text-[15px] mb-1">Before today's session â€” log yesterday first</p>
+              <p className="font-medium text-white text-[15px] mb-1">Before today's session — log yesterday first</p>
               <p className="text-white/60 text-[13px]">Yesterday's task: <span className="text-white/80 italic">"{yesterdayTask.task}"</span></p>
               <p className="text-white/50 text-[12px] mt-1">Accountability is non-negotiable. What did you actually do?</p>
             </div>
@@ -193,13 +193,13 @@ export default function CoachPage() {
           <textarea
             value={yesterdayNote}
             onChange={e => setYesterdayNote(e.target.value)}
-            placeholder="Be honest â€” did you complete it? What happened? Even if you didn't do it, say so. That's the starting point."
+            placeholder="Be honest — did you complete it? What happened? Even if you didn't do it, say so. That's the starting point."
             className="w-full bg-white/10 text-white placeholder-white/30 text-[14px] px-4 py-3 rounded-xl border border-white/10 outline-none resize-none leading-[1.6] mb-3"
             rows={3}
           />
           <button onClick={logYesterdayWork} disabled={!yesterdayNote.trim() || submittingLog}
             className="px-5 py-2.5 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium disabled:opacity-40 hover:bg-[#9a7820] transition-colors">
-            {submittingLog ? 'Logging...' : 'Log & continue â†’'}
+            {submittingLog ? 'Logging...' : 'Log & continue →'}
           </button>
         </div>
       )}
@@ -208,13 +208,13 @@ export default function CoachPage() {
       {!needsYesterdayLog && (
         <div className="mb-4">
           {todayTask ? (
-            <div className={`rounded-2xl p-5 border ${todayTask.completed === true ? 'bg-[#f0faf0] border-green-300' : 'bg-[#faf3e0] border-[#b8922a]/30'}`}>
+            <div className={`rounded-2xl p-5 border ${todayTask.completed ? 'bg-green-50 border-green-200' : 'bg-[#faf3e0] border-[#b8922a]/30'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                   <p className="text-[10px] font-bold tracking-[.12em] uppercase text-[#b8922a] mb-2">
-                    {todayTask.completed ? 'âœ“ Today\'s task â€” completed' : 'âš¡ Today\'s task'}
+                    {todayTask.completed ? '✓ Today\'s task — completed' : '⚡ Today\'s task'}
                   </p>
-                  <p className={`text-[14px] leading-[1.7] font-medium ${todayTask.completed === true ? 'text-[#666] line-through' : 'text-[#111]'}`}>{todayTask.task}</p>
+                  <p className="text-[14px] text-[#111] leading-[1.7] font-medium">{todayTask.task}</p>
                 </div>
                 {!todayTask.completed && (
                   <button onClick={async () => {
@@ -222,7 +222,7 @@ export default function CoachPage() {
                     setTodayTask((p: any) => ({ ...p, completed: true }))
                     toast.success('Task marked done! Great work.')
                   }} className="flex-shrink-0 px-3 py-1.5 bg-[#111] text-white rounded-xl text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors">
-                    Mark done âœ“
+                    Mark done ✓
                   </button>
                 )}
               </div>
@@ -232,7 +232,7 @@ export default function CoachPage() {
               className="w-full py-3.5 border-2 border-dashed border-[#b8922a]/40 rounded-2xl text-[13px] text-[#b8922a] hover:border-[#b8922a]/70 transition-colors flex items-center justify-center gap-2">
               {generatingTask
                 ? <><span className="w-3.5 h-3.5 border-2 border-[#b8922a]/30 border-t-[#b8922a] rounded-full spin-anim"/> Generating today's task...</>
-                : 'âš¡ Generate today\'s task'
+                : '⚡ Generate today\'s task'
               }
             </button>
           )}
@@ -284,7 +284,7 @@ export default function CoachPage() {
               value={inp}
               onChange={e => setInp(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-              placeholder={needsYesterdayLog ? "Log yesterday's work first â†‘" : "Talk to your coach..."}
+              placeholder={needsYesterdayLog ? "Log yesterday's work first →" : "Talk to your coach..."}
               disabled={needsYesterdayLog || usage.remaining <= 0}
               className="flex-1 px-4 py-2.5 bg-[#f8f7f5] border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#b8922a] disabled:opacity-50 transition-colors"
             />

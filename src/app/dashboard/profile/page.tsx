@@ -6,11 +6,11 @@ import toast from 'react-hot-toast'
 import Link from 'next/link'
 
 const FEEDBACK_CATS = [
-  { v: 'bug', l: 'ðŸ› Bug report', d: 'Something is broken' },
-  { v: 'feature', l: 'âœ¨ Feature request', d: 'I want this' },
-  { v: 'improvement', l: 'âš¡ Improvement', d: 'Make something better' },
-  { v: 'praise', l: '❤ï¸ Praise', d: 'What I love' },
-  { v: 'other', l: 'ðŸ’¬ Other', d: 'General' },
+  { v: 'bug', l: '🐛 Bug report', d: 'Something is broken' },
+  { v: 'feature', l: '✨ Feature request', d: 'I want this' },
+  { v: 'improvement', l: '⚡ Improvement', d: 'Make something better' },
+  { v: 'praise', l: '❤️ Praise', d: 'What I love' },
+  { v: 'other', l: '💬 Other', d: 'General' },
 ]
 
 export default function ProfileFeedbackPage() {
@@ -38,15 +38,11 @@ export default function ProfileFeedbackPage() {
   const [hoverRating, setHoverRating] = useState(0)
   const [canRate, setCanRate] = useState(false)
   const [ratingSubmitted, setRatingSubmitted] = useState(false)
-  const [avgRating, setAvgRating] = useState('â€”')
+  const [avgRating, setAvgRating] = useState('—')
   // Subscription cancel
   const [showCancelFlow, setShowCancelFlow] = useState(false)
   const [cancelStep, setCancelStep] = useState(0)
   const [cancelReason, setCancelReason] = useState('')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleteStep, setDeleteStep] = useState(0)
-  const [deleteConfirmText, setDeleteConfirmText] = useState('')
-  const [deletingAccount, setDeletingAccount] = useState(false)
   const DAILY_LIMIT = 5
 
   useEffect(() => {
@@ -110,7 +106,7 @@ export default function ProfileFeedbackPage() {
     await supabase.from('goals').update({ is_paused: false, paused_at: null, pause_reason: null }).eq('id', goalId)
     const resumed = pausedGoals.find(g => g.id === goalId)
     if (resumed) { setActiveGoals(prev => [{ ...resumed, is_paused: false }, ...prev]); setPausedGoals(prev => prev.filter(g => g.id !== goalId)) }
-    toast.success('Goal resumed! ðŸŽ¯')
+    toast.success('Goal resumed! 🎯')
     setResuming(null)
     router.refresh()
   }
@@ -152,13 +148,13 @@ export default function ProfileFeedbackPage() {
               }
               <button onClick={() => fileRef.current?.click()}
                 className="absolute inset-0 rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <span className="text-white text-[11px] font-medium">{uploadingAvatar ? 'Uploading...' : 'ðŸ“· Change'}</span>
+                <span className="text-white text-[11px] font-medium">{uploadingAvatar ? 'Uploading...' : '📷 Change'}</span>
               </button>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) uploadAvatar(f) }}/>
             </div>
             <div className="flex gap-2 pb-1">
               {isPro && <span className="text-[11px] font-semibold bg-[#b8922a] text-white px-2.5 py-1 rounded-full">PRO</span>}
-              <Link href="/dashboard/settings" className="text-[12px] px-3 py-1.5 border border-[#e8e8e8] rounded-xl hover:bg-[#f8f7f5] transition-colors">âš™ Settings</Link>
+              <Link href="/dashboard/settings" className="text-[12px] px-3 py-1.5 border border-[#e8e8e8] rounded-xl hover:bg-[#f8f7f5] transition-colors">⚙ Settings</Link>
             </div>
           </div>
           <h1 className="font-serif text-[24px] mb-0.5">{profile?.full_name}</h1>
@@ -196,12 +192,12 @@ export default function ProfileFeedbackPage() {
       {/* Paused goals */}
       {pausedGoals.length > 0 && (
         <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
-          <p className="font-medium text-[14px] mb-3">â¸ Paused ({pausedGoals.length})</p>
+          <p className="font-medium text-[14px] mb-3">⏸ Paused ({pausedGoals.length})</p>
           {pausedGoals.map(g => (
             <div key={g.id} className="flex items-center gap-3 p-3 bg-[#f8f7f5] rounded-xl mb-2">
               <div className="flex-1 min-w-0"><p className="text-[13px] font-medium">{g.title}</p><p className="text-[11px] text-[#b8922a] mt-0.5">{g.streak} day streak saved</p></div>
               <button onClick={() => resumeGoal(g.id)} disabled={resuming === g.id} className="px-3 py-1.5 bg-[#111] text-white rounded-lg text-[12px] font-medium disabled:opacity-50">
-                {resuming === g.id ? '...' : 'â–¶ Resume'}
+                {resuming === g.id ? '...' : '▶ Resume'}
               </button>
             </div>
           ))}
@@ -211,7 +207,7 @@ export default function ProfileFeedbackPage() {
       {/* Completed goals */}
       {completedGoals.length > 0 && (
         <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-4">
-          <p className="font-medium text-[14px] mb-3">Completed ðŸŽ¯ ({completedGoals.length})</p>
+          <p className="font-medium text-[14px] mb-3">Completed 🎯 ({completedGoals.length})</p>
           {completedGoals.map((g: any) => (
             <div key={g.title} className="p-3 bg-green-50 border border-green-100 rounded-xl mb-2">
               <div className="flex items-center justify-between"><p className="text-[13px] font-medium text-green-800">{g.title}</p><span className="text-[10px] text-green-600">{g.completed_at ? new Date(g.completed_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''}</span></div>
@@ -245,7 +241,7 @@ export default function ProfileFeedbackPage() {
         </div>
       </div>
 
-      {/* â”€â”€ FEEDBACK SECTION â”€â”€ */}
+      {/* FEEDBACK SECTION */}
       <div className="mt-6 mb-2">
         <h2 className="font-serif text-[24px] mb-1">Feedback & Reviews</h2>
         <p className="text-[13px] text-[#999] mb-4">Every message is read by the team.</p>
@@ -260,13 +256,13 @@ export default function ProfileFeedbackPage() {
             <div className="flex gap-1">
               {[1,2,3,4,5].map(s => (
                 <button key={s} onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} onClick={() => setWeekRating(s)} className="text-[26px] transition-transform hover:scale-125">
-                  <span style={{ color: s <= (hoverRating || weekRating) ? '#b8922a' : '#e8e8e8' }}>â˜…</span>
+                  <span style={{ color: s <= (hoverRating || weekRating) ? '#b8922a' : '#e8e8e8' }}>★</span>
                 </button>
               ))}
             </div>
             {weekRating > 0 && <button onClick={submitRating} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium">Submit</button>}
           </div>
-        ) : ratingSubmitted ? <p className="text-green-600 font-medium text-[13px]">âœ“ Thanks! Come back next week.</p>
+        ) : ratingSubmitted ? <p className="text-green-600 font-medium text-[13px]">✓ Thanks! Come back next week.</p>
         : <p className="text-[13px] text-[#999]">Already rated this week.</p>}
       </div>
 
@@ -282,7 +278,7 @@ export default function ProfileFeedbackPage() {
             </button>
           ))}
         </div>
-        <textarea value={fbMessage} onChange={e => setFbMessage(e.target.value)} placeholder="Be specific â€” what page, what happened, what you expected..." className="w-full text-[13px] border border-[#e8e8e8] rounded-xl px-3.5 py-3 outline-none focus:border-[#111] resize-none mb-2" rows={3} maxLength={1000} disabled={todayFbCount >= DAILY_LIMIT}/>
+        <textarea value={fbMessage} onChange={e => setFbMessage(e.target.value)} placeholder="Be specific — what page, what happened, what you expected..." className="w-full text-[13px] border border-[#e8e8e8] rounded-xl px-3.5 py-3 outline-none focus:border-[#111] resize-none mb-2" rows={3} maxLength={1000} disabled={todayFbCount >= DAILY_LIMIT}/>
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-[#999]">{DAILY_LIMIT - todayFbCount} messages left today</span>
           <button onClick={submitFeedback} disabled={!fbMessage.trim() || fbSubmitting || todayFbCount >= DAILY_LIMIT} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium disabled:opacity-40">Send</button>
@@ -298,7 +294,7 @@ export default function ProfileFeedbackPage() {
             <button onClick={() => setShowCancelFlow(true)} className="text-[12px] text-red-400 hover:underline">Cancel subscription</button>
           ) : cancelStep === 0 ? (
             <div className="space-y-2">
-              <p className="text-[13px] font-medium">Before you go â€” what's the reason?</p>
+              <p className="text-[13px] font-medium">Before you go — what's the reason?</p>
               {['Too expensive', 'Not using it enough', 'Missing a feature I need', 'Switching to another app', 'Other'].map(r => (
                 <button key={r} onClick={() => { setCancelReason(r); setCancelStep(1) }} className={`w-full text-left px-3.5 py-2.5 border rounded-xl text-[13px] transition-all ${cancelReason === r ? 'bg-[#111] text-white border-[#111]' : 'border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>{r}</button>
               ))}
@@ -307,22 +303,12 @@ export default function ProfileFeedbackPage() {
           ) : (
             <div className="bg-[#faf3e0] border border-[#b8922a]/30 rounded-xl p-4">
               {cancelReason === 'Too expensive' && <p className="text-[13px] text-[#111] mb-3">We hear you. Your Pro account gives you 50 coach chats/day, unlimited vision art, and circle creation. We're adding more every week. Would pausing for 30 days help instead?</p>}
-              {cancelReason === 'Not using it enough' && <p className="text-[13px] text-[#111] mb-3">The daily task feature was just built to help with exactly this â€” it gives you one focused action each day. Give it one more week with daily tasks turned on.</p>}
-              {cancelReason === 'Missing a feature I need' && <p className="text-[13px] text-[#111] mb-3">Tell us what's missing via feedback below and we'll build it. Seriously â€” most features were user requests.</p>}
+              {cancelReason === 'Not using it enough' && <p className="text-[13px] text-[#111] mb-3">The daily task feature was just built to help with exactly this — it gives you one focused action each day. Give it one more week with daily tasks turned on.</p>}
+              {cancelReason === 'Missing a feature I need' && <p className="text-[13px] text-[#111] mb-3">Tell us what's missing via feedback below and we'll build it. Seriously — most features were user requests.</p>}
               {(cancelReason === 'Switching to another app' || cancelReason === 'Other') && <p className="text-[13px] text-[#111] mb-3">We're sorry to see you go. Your streak, goals, and data will be preserved if you ever come back.</p>}
               <div className="flex gap-2">
-                <button onClick={() => { setShowCancelFlow(false); setCancelStep(0); toast('Glad you\'re staying! ðŸŽ‰') }} className="flex-1 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium">Keep Pro</button>
-                <button onClick={async () => {
-                    try {
-                      await supabase.from('profiles').update({ plan: 'free', plan_cancelled_at: new Date().toISOString() }).eq('id', user.id)
-                      setProfile((p: any) => ({ ...p, plan: 'free' }))
-                      setShowCancelFlow(false); setCancelStep(0)
-                      toast.success('Subscription cancelled. You\'ve been moved to the free plan.')
-                      router.refresh()
-                    } catch {
-                      toast.error('Could not cancel — please email support@manifest.app')
-                    }
-                  }} className="flex-1 py-2 border border-red-200 text-red-500 rounded-xl text-[12px]">Cancel anyway</button>
+                <button onClick={() => { setShowCancelFlow(false); setCancelStep(0); toast('Glad you\'re staying! 🎉') }} className="flex-1 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium">Keep Pro</button>
+                <button onClick={() => { toast.error('To cancel, go to your Stripe customer portal or email support@manifest.app'); setShowCancelFlow(false); setCancelStep(0) }} className="flex-1 py-2 border border-red-200 text-red-500 rounded-xl text-[12px]">Cancel anyway</button>
               </div>
             </div>
           )}
@@ -331,56 +317,8 @@ export default function ProfileFeedbackPage() {
 
       {/* Danger zone */}
       <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5">
-        <p className="font-medium text-[14px] mb-3 text-red-500">Danger zone</p>
-        {!showDeleteConfirm ? (
-          <button onClick={() => setShowDeleteConfirm(true)} className="px-4 py-2 border border-red-200 text-red-500 rounded-xl text-[13px] hover:bg-red-50 transition-colors">
-            Delete my account
-          </button>
-        ) : deleteStep === 0 ? (
-          <div>
-            <p className="text-[13px] font-medium text-[#111] mb-1">Are you sure?</p>
-            <p className="text-[12px] text-[#999] mb-4">This permanently deletes all your goals, streaks, check-ins, and posts. This cannot be undone.</p>
-            <div className="flex gap-2">
-              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
-              <button onClick={() => setDeleteStep(1)} className="flex-1 py-2 bg-red-500 text-white rounded-xl text-[13px] font-medium">Yes, delete</button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <p className="text-[13px] font-medium text-[#111] mb-2">Type DELETE to confirm</p>
-            <input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)}
-              placeholder="Type DELETE" className="w-full px-3.5 py-2.5 border border-red-200 rounded-xl text-[13px] outline-none focus:border-red-400 mb-3"/>
-            <div className="flex gap-2">
-              <button onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); setDeleteConfirmText('') }} className="flex-1 py-2 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
-              <button
-                disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
-                onClick={async () => {
-                  setDeletingAccount(true)
-                  try {
-                    // Delete all user data
-                    await Promise.all([
-                      supabase.from('goals').delete().eq('user_id', user.id),
-                      supabase.from('checkins').delete().eq('user_id', user.id),
-                      supabase.from('coach_messages').delete().eq('user_id', user.id),
-                      supabase.from('feed_posts').delete().eq('user_id', user.id),
-                      supabase.from('rewards').delete().eq('user_id', user.id),
-                      supabase.from('daily_tasks').delete().eq('user_id', user.id),
-                      supabase.from('friendships').delete().or(`requester.eq.${user.id},addressee.eq.${user.id}`),
-                    ])
-                    await supabase.from('profiles').delete().eq('id', user.id)
-                    await supabase.auth.signOut()
-                    router.push('/')
-                  } catch {
-                    toast.error('Deletion failed — please try again')
-                    setDeletingAccount(false)
-                  }
-                }}
-                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-[13px] font-medium disabled:opacity-40">
-                {deletingAccount ? 'Deleting...' : 'Delete forever'}
-              </button>
-            </div>
-          </div>
-        )}
+        <p className="font-medium text-[14px] mb-2 text-red-500">Danger zone</p>
+        <p className="text-[12px] text-[#999] mb-2">To delete your account, email <a href="mailto:support@manifest.app" className="text-[#b8922a] underline">support@manifest.app</a></p>
       </div>
     </div>
   )
