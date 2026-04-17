@@ -7,11 +7,12 @@ import MediaUploader from '@/components/dashboard/MediaUploader'
 export default function FriendsPage() {
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
-  const [tab, setTab] = useState<'discover'|'friends'|'requests'|'messages'>('discover')
+  const [tab, setTab] = useState<'discover'|'friends'|'requests'|'messages'|'blocked'>('discover')
   const [users, setUsers] = useState<any[]>([])
   const [friends, setFriends] = useState<any[]>([])
   const [requests, setRequests] = useState<any[]>([])
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set())
+  const [blockedUsers, setBlockedUsers] = useState<any[]>([])
   const [activeChat, setActiveChat] = useState<any>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [sharedCircles, setSharedCircles] = useState<Record<string, any[]>>({})
@@ -49,6 +50,13 @@ export default function FriendsPage() {
 
     const bIds = new Set(Array.from((blocked || []).map((b: any) => b.blocked_id)))
     setBlockedIds(bIds)
+    // Load full profiles for blocked users
+    if (bIds.size > 0) {
+      const { data: blockedProfiles } = await supabase
+        .from('profiles').select('id, full_name, avatar_url, plan')
+        .in('id', Array.from(bIds))
+      setBlockedUsers(blockedProfiles || [])
+    }
 
     const acceptedFriends = (myFriendships || [])
       .filter(f => f.status === 'accepted')
@@ -182,6 +190,13 @@ export default function FriendsPage() {
     toast.success(`${blockModal.full_name} blocked`)
   }
 
+  const unblockUser = async (blockedId: string) => {
+    await supabase.from('blocked_users').delete().eq('blocker_id', user.id).eq('blocked_id', blockedId)
+    setBlockedIds(prev => { const next = new Set(Array.from(prev)); next.delete(blockedId); return next })
+    setBlockedUsers(prev => prev.filter(u => u.id !== blockedId))
+    toast.success('User unblocked')
+  }
+
   const clearDM = (friendId: string) => {
     const now = new Date().toISOString()
     const updated = { ...dmClearedAt, [friendId]: now }
@@ -256,6 +271,7 @@ export default function FriendsPage() {
           ['friends', `Friends (${friends.length})`],
           ['requests', `Requests`],
           ['messages', 'Messages'],
+          ['blocked', 'Blocked'],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id as any)}
             className={`px-4 py-3 text-[13px] font-medium border-b-2 whitespace-nowrap transition-all flex items-center gap-1.5 ${tab === id ? 'border-[#111] text-[#111]' : 'border-transparent text-[#999] hover:text-[#666]'}`}>
@@ -351,6 +367,30 @@ export default function FriendsPage() {
                 ))}
               </div>
           }
+        </div>
+      )}
+
+      {/* BLOCKED */}
+      {tab === 'blocked' && (
+        <div>
+          {blockedUsers.length === 0 ? (
+            <div className="text-center py-12 text-[#999] text-[14px]">No blocked users</div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {blockedUsers.map((u: any) => (
+                <div key={u.id} className="bg-white dark:bg-[#1a1a1a] border border-[#e8e8e8] dark:border-[#333] rounded-2xl p-4 flex items-center gap-3">
+                  {avatarEl(u)}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-medium truncate">{u.full_name}</p>
+                    <p className="text-[11px] text-[#999]">Blocked</p>
+                  </div>
+                  <button onClick={() => unblockUser(u.id)} className="px-3 py-1.5 border border-[#e8e8e8] rounded-lg text-[12px] text-[#999] hover:border-[#b8922a] hover:text-[#b8922a] transition-colors">
+                    Unblock
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
