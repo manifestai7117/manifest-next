@@ -33,6 +33,7 @@ export default function CirclesPage() {
   const [circleMediaType, setCircleMediaType] = useState<'image'|'video'|undefined>()
   const [leaving, setLeaving] = useState<string|null>(null)
   const [clearedAt, setClearedAt] = useState<Record<string,string>>({})
+  const [confirmLeave, setConfirmLeave] = useState<string|null>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -53,7 +54,6 @@ export default function CirclesPage() {
       const mine = (all || []).filter((c: any) => ids.includes(c.id))
       setMyCircles(mine)
       setAllCircles(all || [])
-      // counts
       const counts: Record<string,number> = {}
       await Promise.all((all || []).map(async (c: any) => {
         const { count } = await supabase.from('circle_members').select('*', { count: 'exact', head: true }).eq('circle_id', c.id)
@@ -69,10 +69,53 @@ export default function CirclesPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
 
+  // Supabase Realtime for circle messages
+  useEffect(() => {
+    if (!activeCircle || !user) return
+
+    const channel = supabase
+      .channel(`circle-messages-${activeCircle.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'circle_messages',
+          filter: `circle_id=eq.${activeCircle.id}`,
+        },
+        async (payload) => {
+          const newMsg = payload.new as any
+          // Avoid duplicates (we already add our own messages optimistically)
+          setMsgs(prev => {
+            if (prev.find(m => m.id === newMsg.id)) return prev
+            // Fetch profile for the message sender
+            return [...prev, newMsg]
+          })
+          // Fetch full message with profile data
+          const { data: fullMsg } = await supabase
+            .from('circle_messages')
+            .select('*, profiles:profiles(id, full_name, avatar_url)')
+            .eq('id', newMsg.id)
+            .single()
+          if (fullMsg) {
+            setMsgs(prev => prev.map(m => m.id === fullMsg.id ? fullMsg : m))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [activeCircle, user])
+
   const openCircle = async (circle: any) => {
     setActiveCircle(circle)
     setShowMembers(false)
-    const { data: history } = await supabase.from('circle_messages').select('*, profiles:profiles(id, full_name, avatar_url)').eq('circle_id', circle.id).order('created_at', { ascending: true }).limit(60)
+    const { data: history } = await supabase
+      .from('circle_messages')
+      .select('*, profiles:profiles(id, full_name, avatar_url)')
+      .eq('circle_id', circle.id)
+      .order('created_at', { ascending: true })
+      .limit(80)
     const cleared = clearedAt[circle.id]
     const filtered = (history || []).filter((m: any) => !cleared || new Date(m.created_at) > new Date(cleared))
     setMsgs(filtered)
@@ -99,12 +142,9 @@ export default function CirclesPage() {
     setMemberCounts(prev => ({ ...prev, [circle.id]: (prev[circle.id] || 0) + 1 }))
     toast.success('Joined!')
     setTab('my')
-    // Auto-open the joined circle
     await openCircle(circle)
     setJoining(null)
   }
-
-  const [confirmLeave, setConfirmLeave] = useState<string|null>(null)
 
   const leaveCircle = async (circleId: string) => {
     if (!user) return
@@ -115,6 +155,7 @@ export default function CirclesPage() {
     setMyCircles(prev => prev.filter(c => c.id !== circleId))
     if (activeCircle?.id === circleId) setActiveCircle(null)
     setLeaving(null)
+    setConfirmLeave(null)
     toast.success('Left circle')
   }
 
@@ -128,22 +169,64 @@ export default function CirclesPage() {
   }
 
   const sendMsg = async () => {
-    if ((!inp.trim() && !circleMediaUrl) || sending || !activeCircle) return
+    if ((!inp.trim() && !circleMediaUrl) || sending || !activeCircle || !user) return
     const text = inp.trim()
     setInp('')
     setSending(true)
-    await fetch('/api/circles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ circleId: activeCircle.id, content: text || '📎', media_url: circleMediaUrl || null, media_type: circleMediaType || null }) })
-    setCircleMediaUrl(''); setCircleMediaType(undefined)
+
+    // Optimistic: add a placeholder immediately
+    const tempId = `temp-${Date.now()}`
+    const optimistic = {
+      id: tempId,
+      circle_id: activeCircle.id,
+      user_id: user.id,
+      content: text || null,
+      media_url: circleMediaUrl || null,
+      media_type: circleMediaType || null,
+      created_at: new Date().toISOString(),
+      profiles: null, // will be filled by realtime
+    }
+    setMsgs(prev => [...prev, optimistic])
+    setCircleMediaUrl('')
+    setCircleMediaType(undefined)
+
+    const res = await fetch('/api/circles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        circleId: activeCircle.id,
+        content: text || '📎',
+        media_url: circleMediaUrl || null,
+        media_type: circleMediaType || null,
+      }),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      // Replace optimistic with real message
+      if (data.message) {
+        setMsgs(prev => prev.map(m => m.id === tempId ? { ...data.message, profiles: { id: user.id, full_name: 'You' } } : m))
+      }
+    } else {
+      // Remove optimistic on error
+      setMsgs(prev => prev.filter(m => m.id !== tempId))
+      toast.error('Failed to send message')
+    }
+
     setSending(false)
-    // Re-fetch last message
-    const { data } = await supabase.from('circle_messages').select('*, profiles:profiles(id, full_name, avatar_url)').eq('circle_id', activeCircle.id).order('created_at', { ascending: false }).limit(1)
-    if (data?.[0]) setMsgs(prev => [...prev, data[0]])
   }
 
   const createCircle = async () => {
     if (!newCircle.name.trim() || !newCircle.category || !newCircle.goal_description.trim() || creating) return
     setCreating(true)
-    const { data, error } = await supabase.from('circles').insert({ name: newCircle.name.trim(), category: newCircle.category, goal_description: newCircle.goal_description.trim(), is_private: newCircle.is_private, created_by: user.id, member_count: 1 }).select().single()
+    const { data, error } = await supabase.from('circles').insert({
+      name: newCircle.name.trim(),
+      category: newCircle.category,
+      goal_description: newCircle.goal_description.trim(),
+      is_private: newCircle.is_private,
+      created_by: user.id,
+      member_count: 1,
+    }).select().single()
     if (error || !data) { toast.error('Could not create circle'); setCreating(false); return }
     await supabase.from('circle_members').insert({ circle_id: data.id, user_id: user.id })
     setMyCircles(prev => [data, ...prev])
@@ -165,26 +248,22 @@ export default function CirclesPage() {
     const count = memberCounts[activeCircle.id] ?? 0
     return (
       <div className="fade-up max-w-[760px]">
+        {/* Leave confirm modal */}
         {confirmLeave && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
-          <div className="bg-white rounded-2xl max-w-[380px] w-full p-6 shadow-2xl">
-            <h3 className="font-serif text-[20px] mb-2">Leave this circle?</h3>
-            <p className="text-[13px] text-[#666] mb-5">You can rejoin anytime. Your previous messages will remain.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmLeave(null)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
-              <button onClick={async () => { 
-                await supabase.from('circle_members').delete().eq('circle_id', confirmLeave).eq('user_id', user.id)
-                setMyCircleIds(prev => prev.filter(id => id !== confirmLeave))
-                setMyCircles(prev => prev.filter(c => c.id !== confirmLeave))
-                setActiveCircle(null)
-                setConfirmLeave(null)
-                toast.success('Left circle')
-              }} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[13px] font-medium hover:bg-red-600">Leave</button>
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+            <div className="bg-white rounded-2xl max-w-[380px] w-full p-6 shadow-2xl">
+              <h3 className="font-serif text-[20px] mb-2">Leave this circle?</h3>
+              <p className="text-[13px] text-[#666] mb-5">You can rejoin anytime. Your previous messages will remain.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmLeave(null)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
+                <button onClick={() => leaveCircle(confirmLeave)} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[13px] font-medium hover:bg-red-600">Leave</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-      <button onClick={() => setActiveCircle(null)} className="flex items-center gap-1.5 text-[13px] text-[#666] mb-5 hover:text-[#111]">← Back to circles</button>
+        )}
+
+        <button onClick={() => setActiveCircle(null)} className="flex items-center gap-1.5 text-[13px] text-[#666] mb-5 hover:text-[#111]">← Back to circles</button>
+
         <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -197,20 +276,26 @@ export default function CirclesPage() {
             <button onClick={() => clearMyView(activeCircle.id)} className="px-3 py-2 border border-[#e8e8e8] rounded-xl text-[12px] text-[#999] hover:bg-[#f8f7f5]">Clear view</button>
             <button onClick={() => setShowMembers(!showMembers)} className="px-3 py-2 border border-[#e8e8e8] rounded-xl text-[12px] font-medium hover:bg-[#f8f7f5]">Members ({count})</button>
             {joined && (
-              <button onClick={() => leaveCircle(activeCircle.id)}
-                className={`px-3 py-2 border rounded-xl text-[12px] transition-colors ${confirmLeave === activeCircle.id ? 'bg-red-500 text-white border-red-500' : 'border-red-200 text-red-500 hover:bg-red-50'}`}>
-                {confirmLeave === activeCircle.id ? 'Confirm leave?' : 'Leave'}
+              <button
+                onClick={() => setConfirmLeave(activeCircle.id)}
+                className="px-3 py-2 border border-red-200 text-red-500 rounded-xl text-[12px] hover:bg-red-50 transition-colors"
+              >
+                Leave
               </button>
             )}
           </div>
         </div>
+
         {showMembers && members.length > 0 && (
           <div className="bg-white border border-[#e8e8e8] rounded-2xl p-4 mb-4">
             <p className="font-medium text-[13px] mb-3">Members</p>
             <div className="flex flex-wrap gap-2">
               {members.map((m: any) => (
                 <button key={m.id} onClick={() => setViewingMember(m.profiles?.id || m.user_id)} className="flex items-center gap-2 px-3 py-1.5 bg-[#f8f7f5] rounded-xl hover:bg-[#f0ede8] transition-colors">
-                  {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} className="w-6 h-6 rounded-full object-cover"/> : <div className="w-6 h-6 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[10px]">{m.profiles?.full_name?.[0]}</div>}
+                  {m.profiles?.avatar_url
+                    ? <img src={m.profiles.avatar_url} className="w-6 h-6 rounded-full object-cover"/>
+                    : <div className="w-6 h-6 rounded-full bg-[#b8922a] flex items-center justify-center text-white text-[10px]">{m.profiles?.full_name?.[0]}</div>
+                  }
                   <span className="text-[12px] font-medium">{m.profiles?.full_name || 'Member'}</span>
                   {m.profiles?.plan === 'pro' && <span className="text-[9px] bg-[#b8922a] text-white px-1.5 py-0.5 rounded-full">PRO</span>}
                 </button>
@@ -218,8 +303,11 @@ export default function CirclesPage() {
             </div>
           </div>
         )}
-        <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden">
-          <div className="h-[420px] overflow-y-auto px-5 py-4 space-y-3">
+
+        {/* Chat box */}
+        <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden flex flex-col" style={{ height: 520 }}>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
             {msgs.length === 0 && <p className="text-center text-[#999] text-[13px] py-8">No messages yet. Be the first!</p>}
             {msgs.map((m: any) => {
               const isMe = m.user_id === user?.id
@@ -228,79 +316,94 @@ export default function CirclesPage() {
                 <div key={m.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
                   {!isMe && (
                     <button onClick={() => !isAI && setViewingMember(m.profiles?.id || m.user_id)}>
-                      {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} className="w-8 h-8 rounded-full object-cover flex-shrink-0"/> : <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[12px] font-semibold ${isAI ? 'bg-[#b8922a]' : 'bg-[#666]'}`}>{isAI ? 'M' : m.profiles?.full_name?.[0] || '?'}</div>}
+                      {m.profiles?.avatar_url
+                        ? <img src={m.profiles.avatar_url} className="w-8 h-8 rounded-full object-cover flex-shrink-0"/>
+                        : <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[12px] font-semibold ${isAI ? 'bg-[#b8922a]' : 'bg-[#666]'}`}>{isAI ? 'M' : m.profiles?.full_name?.[0] || '?'}</div>
+                      }
                     </button>
                   )}
                   <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
                     {!isMe && <p className="text-[11px] text-[#999] px-1">{isAI ? 'Manifest Coach' : m.profiles?.full_name}</p>}
                     <div className={`rounded-2xl overflow-hidden ${isMe ? 'bg-[#111] text-white rounded-tr-sm' : isAI ? 'bg-[#faf3e0] text-[#111] rounded-tl-sm' : 'bg-[#f8f7f5] text-[#111] rounded-tl-sm'}`}>
                       {m.media_url && (
-                        <div>{m.media_type === 'video' ? <video src={m.media_url} controls className="w-full max-h-40 object-cover"/> : <img src={m.media_url} alt="" className="w-full max-h-40 object-cover cursor-pointer" onClick={() => window.open(m.media_url, '_blank')}/>}</div>
+                        <div>
+                          {m.media_type === 'video'
+                            ? <video src={m.media_url} controls className="w-full max-h-40 object-cover"/>
+                            : <img src={m.media_url} alt="" className="w-full max-h-40 object-cover cursor-pointer" onClick={() => window.open(m.media_url, '_blank')}/>
+                          }
+                        </div>
                       )}
                       {m.content && m.content !== '📎' && <p className="px-4 py-2.5 text-[14px] leading-[1.6]">{m.content}</p>}
                     </div>
-                    <p className="text-[10px] text-[#bbb] px-1">{new Date(m.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+                    <p className="text-[10px] text-[#bbb] px-1">
+                      {new Date(m.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                    </p>
                   </div>
                 </div>
               )
             })}
             {sending && (
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-[#666] flex items-center justify-center text-white text-[12px]">M</div>
-                <div className="bg-[#f8f7f5] px-4 py-3 rounded-2xl flex gap-1.5 items-center">
+              <div className="flex gap-3 flex-row-reverse">
+                <div className="bg-[#f8f7f5] px-4 py-3 rounded-2xl flex gap-1.5 items-center rounded-tr-sm">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-1"/><span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-2"/><span className="w-1.5 h-1.5 rounded-full bg-[#b8922a] bounce-3"/>
                 </div>
               </div>
             )}
             <div ref={endRef}/>
           </div>
+
+          {/* Input area */}
           {joined ? (
-            <div className="border-t border-[#e8e8e8] flex">
-              <div className="flex flex-col">
-                <div className="px-4 pt-2 border-t border-[#e8e8e8]">
+            <div className="border-t border-[#e8e8e8] flex-shrink-0">
+              {/* Media preview */}
+              {circleMediaUrl && (
+                <div className="px-4 pt-2">
                   <MediaUploader
-                    onUpload={(url, t) => {
-                      setCircleMediaUrl(url)
-                      setCircleMediaType(t)
-                    }}
-                    onClear={() => {
-                      setCircleMediaUrl('')
-                      setCircleMediaType(undefined)
-                    }}
+                    onUpload={(url, t) => { setCircleMediaUrl(url); setCircleMediaType(t) }}
+                    onClear={() => { setCircleMediaUrl(''); setCircleMediaType(undefined) }}
                     mediaUrl={circleMediaUrl}
                     mediaType={circleMediaType}
                     context="circle"
                   />
                 </div>
-
-                <div className="flex">
-                  <input
-                    value={inp}
-                    onChange={e => setInp(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && sendMsg()}
-                    placeholder="Share your update..."
-                    className="flex-1 px-5 py-3.5 text-[14px] outline-none"
+              )}
+              <div className="flex items-center gap-2 px-3 py-2">
+                {!circleMediaUrl && (
+                  <MediaUploader
+                    onUpload={(url, t) => { setCircleMediaUrl(url); setCircleMediaType(t) }}
+                    onClear={() => { setCircleMediaUrl(''); setCircleMediaType(undefined) }}
+                    context="circle"
                   />
-                  <button
-                    onClick={sendMsg}
-                    disabled={sending || (!inp.trim() && !circleMediaUrl)}
-                    className="px-5 bg-[#111] text-white disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="22" y1="2" x2="11" y2="13" />
-                      <polygon points="22,2 15,22 11,13 2,9" />
-                    </svg>
-                  </button>
-                </div>
+                )}
+                <input
+                  value={inp}
+                  onChange={e => setInp(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMsg()}
+                  placeholder="Share your update..."
+                  className="flex-1 px-4 py-3 text-[14px] outline-none bg-transparent"
+                />
+                <button
+                  onClick={sendMsg}
+                  disabled={sending || (!inp.trim() && !circleMediaUrl)}
+                  className="w-9 h-9 bg-[#111] text-white rounded-full flex items-center justify-center disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors flex-shrink-0"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22,2 15,22 11,13 2,9"/>
+                  </svg>
+                </button>
               </div>
             </div>
           ) : (
-            <div className="border-t border-[#e8e8e8] p-4 flex items-center justify-between">
+            <div className="border-t border-[#e8e8e8] p-4 flex items-center justify-between flex-shrink-0">
               <p className="text-[13px] text-[#666]">Join to participate</p>
-              <button onClick={() => join(activeCircle)} disabled={joining === activeCircle.id} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50">{joining === activeCircle.id ? 'Joining...' : 'Join circle'}</button>
+              <button onClick={() => join(activeCircle)} disabled={joining === activeCircle.id} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50">
+                {joining === activeCircle.id ? 'Joining...' : 'Join circle'}
+              </button>
             </div>
           )}
         </div>
+
         {viewingMember && user && <MemberProfile userId={viewingMember} currentUserId={user.id} onClose={() => setViewingMember(null)}/>}
       </div>
     )
@@ -313,7 +416,6 @@ export default function CirclesPage() {
 
   return (
     <div className="fade-up max-w-[900px]">
-      {/* Header */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
           <h1 className="font-serif text-[32px] mb-0.5">Goal Circles</h1>
@@ -326,7 +428,6 @@ export default function CirclesPage() {
         )}
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 p-1 bg-[#f2f0ec] rounded-xl mb-5 w-fit">
         <button onClick={() => setTab('my')} className={`px-5 py-2 rounded-lg text-[13px] font-medium transition-all ${tab === 'my' ? 'bg-white shadow-sm text-[#111]' : 'text-[#666]'}`}>
           My Circles {myCircles.length > 0 && `(${myCircles.length})`}
@@ -336,7 +437,6 @@ export default function CirclesPage() {
         </button>
       </div>
 
-      {/* Create circle form */}
       {showCreate && isPro && (
         <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 mb-5">
           <p className="font-medium text-[15px] mb-4">Create a new circle</p>
@@ -361,7 +461,6 @@ export default function CirclesPage() {
         </div>
       )}
 
-      {/* MY CIRCLES TAB */}
       {tab === 'my' && (
         myCircles.length === 0 ? (
           <div className="bg-white border border-[#e8e8e8] rounded-2xl p-10 text-center">
@@ -394,10 +493,8 @@ export default function CirclesPage() {
         )
       )}
 
-      {/* DISCOVER TAB */}
       {tab === 'discover' && (
         <div>
-          {/* Category filter */}
           <div className="flex gap-2 mb-4 flex-wrap">
             {CATEGORIES.map(cat => (
               <button key={cat} onClick={() => setFilterCat(cat)}

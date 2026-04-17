@@ -22,56 +22,72 @@ export default function FriendsPage() {
   const [loading, setLoading] = useState(true)
   const endRef = useRef<HTMLDivElement>(null)
 
+  const load = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    setUser(user)
+    if (!user) return
+
+    const { data: allUsers } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, plan, avatar_url')
+      .neq('id', user.id)
+      .limit(50)
+
+    const { data: myFriendships } = await supabase
+      .from('friendships')
+      .select('*, requester_profile:profiles!friendships_requester_fkey(id,full_name,email,plan,avatar_url), addressee_profile:profiles!friendships_addressee_fkey(id,full_name,email,plan,avatar_url)')
+      .or(`requester.eq.${user.id},addressee.eq.${user.id}`)
+
+    // Check blocked users
+    const { data: blocked } = await supabase
+      .from('blocked_users')
+      .select('blocked_id')
+      .eq('blocker_id', user.id)
+    const blockedIds = new Set((blocked || []).map((b: any) => b.blocked_id))
+
+    const acceptedFriends = (myFriendships || [])
+      .filter(f => f.status === 'accepted')
+      .map(f => f.requester === user.id ? f.addressee_profile : f.requester_profile)
+      .filter(Boolean)
+      .filter((f: any) => !blockedIds.has(f.id))
+
+    const pendingRequests = (myFriendships || [])
+      .filter(f => f.status === 'pending' && f.addressee === user.id)
+      .map(f => ({ ...f.requester_profile, friendshipId: f.id }))
+      .filter((r: any) => !blockedIds.has(r.id))
+
+    // Track sent pending requests (for cancel button)
+    const sentPending = new Set(
+      (myFriendships || [])
+        .filter(f => f.status === 'pending' && f.requester === user.id)
+        .map(f => f.addressee)
+    )
+
+    const friendIds = new Set(acceptedFriends.map((f: any) => f?.id))
+
+    const nonFriendUsers = (allUsers || [])
+      .filter(u => !friendIds.has(u.id) && !blockedIds.has(u.id))
+      .map(u => ({ ...u, isPending: sentPending.has(u.id) }))
+
+    setUsers(nonFriendUsers)
+    setFriends(acceptedFriends.filter(Boolean))
+    setRequests(pendingRequests)
+
+    // Load shared circles
+    const myCircles = await supabase.from('circle_members').select('circle_id, circle:circles(id,name,category)').eq('user_id', user.id)
+    const myCircleIds = new Set((myCircles.data || []).map((m: any) => m.circle_id))
+
+    const shared: Record<string, any[]> = {}
+    await Promise.all(acceptedFriends.filter(Boolean).map(async (f: any) => {
+      const { data: theirCircles } = await supabase.from('circle_members').select('circle_id, circle:circles(id,name,category)').eq('user_id', f.id)
+      const inCommon = (theirCircles || []).filter((m: any) => myCircleIds.has(m.circle_id))
+      if (inCommon.length) shared[f.id] = inCommon.map((m: any) => m.circle)
+    }))
+    setSharedCircles(shared)
+    setLoading(false)
+  }
+
   useEffect(() => {
-    const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
-      if (!user) return
-
-      const { data: allUsers } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, plan, avatar_url')
-        .neq('id', user.id)
-        .limit(50)
-
-      const { data: myFriendships } = await supabase
-        .from('friendships')
-        .select('*, requester_profile:profiles!friendships_requester_fkey(id,full_name,email,plan,avatar_url), addressee_profile:profiles!friendships_addressee_fkey(id,full_name,email,plan,avatar_url)')
-        .or(`requester.eq.${user.id},addressee.eq.${user.id}`)
-
-      const acceptedFriends = (myFriendships || [])
-        .filter(f => f.status === 'accepted')
-        .map(f => f.requester === user.id ? f.addressee_profile : f.requester_profile)
-
-      const pendingRequests = (myFriendships || [])
-        .filter(f => f.status === 'pending' && f.addressee === user.id)
-        .map(f => ({ ...f.requester_profile, friendshipId: f.id }))
-
-      const friendIds = new Set(acceptedFriends.map((f: any) => f?.id))
-      const sentIds = new Set((myFriendships || []).map(f => f.requester === user.id ? f.addressee : f.requester))
-
-      // Fix 10: exclude friends from discover
-      const nonFriendUsers = (allUsers || [])
-        .filter(u => !friendIds.has(u.id))
-        .map(u => ({ ...u, isPending: sentIds.has(u.id) }))
-
-      setUsers(nonFriendUsers)
-      setFriends(acceptedFriends.filter(Boolean))
-      setRequests(pendingRequests)
-
-      // Load shared circles for each friend
-      const myCircles = await supabase.from('circle_members').select('circle_id, circle:circles(id,name,category)').eq('user_id', user.id)
-      const myCircleIds = new Set((myCircles.data || []).map((m: any) => m.circle_id))
-
-      const shared: Record<string, any[]> = {}
-      await Promise.all(acceptedFriends.filter(Boolean).map(async (f: any) => {
-        const { data: theirCircles } = await supabase.from('circle_members').select('circle_id, circle:circles(id,name,category)').eq('user_id', f.id)
-        const inCommon = (theirCircles || []).filter((m: any) => myCircleIds.has(m.circle_id))
-        if (inCommon.length) shared[f.id] = inCommon.map((m: any) => m.circle)
-      }))
-      setSharedCircles(shared)
-      setLoading(false)
-    }
     load()
   }, [])
 
@@ -83,52 +99,135 @@ export default function FriendsPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // Realtime for DMs
+  // Realtime for DMs - watch both sent and received
   useEffect(() => {
     if (!activeChat || !user) return
+
+    const channelKey = `dm-${[user.id, activeChat.id].sort().join('-')}`
     const channel = supabase
-      .channel(`dm-${[user.id, activeChat.id].sort().join('-')}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${user.id}` },
+      .channel(channelKey)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'direct_messages',
+        },
         (payload) => {
           const newMsg = payload.new as any
-          if (newMsg.sender_id !== activeChat.id) return
+          // Only show messages in this conversation
+          const isInConversation =
+            (newMsg.sender_id === user.id && newMsg.recipient_id === activeChat.id) ||
+            (newMsg.sender_id === activeChat.id && newMsg.recipient_id === user.id)
+          if (!isInConversation) return
           setMessages(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg])
-        })
+        }
+      )
       .subscribe()
+
     return () => { supabase.removeChannel(channel) }
   }, [activeChat, user])
 
+  // Realtime for friend requests (so requests tab updates without refresh)
+  useEffect(() => {
+    if (!user) return
+    const channel = supabase
+      .channel(`friend-requests-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'friendships',
+          filter: `addressee=eq.${user.id}`,
+        },
+        async (payload) => {
+          const newFs = payload.new as any
+          if (newFs.status !== 'pending') return
+          // Fetch requester profile
+          const { data: requesterProfile } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, plan, avatar_url')
+            .eq('id', newFs.requester)
+            .single()
+          if (requesterProfile) {
+            setRequests(prev => {
+              if (prev.find(r => r.friendshipId === newFs.id)) return prev
+              return [...prev, { ...requesterProfile, friendshipId: newFs.id }]
+            })
+          }
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user])
+
   const sendRequest = async (addresseeId: string) => {
-    const { error } = await supabase.from('friendships').insert({ requester: user.id, addressee: addresseeId, status: 'pending' })
+    const { error } = await supabase.from('friendships').insert({
+      requester: user.id,
+      addressee: addresseeId,
+      status: 'pending',
+    })
     if (error) { toast.error('Could not send request'); return }
+
+    // Insert notification for the recipient
+    await supabase.from('notifications').insert({
+      user_id: addresseeId,
+      actor_id: user.id,
+      type: 'friend_request',
+      title: 'New friend request',
+      body: `Someone wants to connect with you`,
+      link: '/dashboard/friends',
+    })
+
     setUsers(prev => prev.map(u => u.id === addresseeId ? { ...u, isPending: true } : u))
     toast.success('Friend request sent!')
   }
 
   const cancelRequest = async (addresseeId: string) => {
-    await supabase.from('friendships').delete()
-      .eq('requester', user.id).eq('addressee', addresseeId).eq('status', 'pending')
+    const { error } = await supabase
+      .from('friendships')
+      .delete()
+      .eq('requester', user.id)
+      .eq('addressee', addresseeId)
+      .eq('status', 'pending')
+    if (error) { toast.error('Could not cancel'); return }
     setUsers(prev => prev.map(u => u.id === addresseeId ? { ...u, isPending: false } : u))
     toast.success('Request cancelled')
   }
 
   const blockUser = async (blockedId: string) => {
     if (!confirm('Block this user? They will not be able to see your profile or posts.')) return
-    await supabase.from('blocked_users').upsert({ blocker_id: user.id, blocked_id: blockedId })
-    // Also remove any friendship
+    const { error } = await supabase.from('blocked_users').upsert({
+      blocker_id: user.id,
+      blocked_id: blockedId,
+    })
+    if (error) { toast.error('Could not block user'); return }
+    // Remove any friendship
     await supabase.from('friendships').delete()
       .or(`and(requester.eq.${user.id},addressee.eq.${blockedId}),and(requester.eq.${blockedId},addressee.eq.${user.id})`)
     setUsers(prev => prev.filter(u => u.id !== blockedId))
     setFriends(prev => prev.filter((f: any) => f.id !== blockedId))
+    if (activeChat?.id === blockedId) setActiveChat(null)
     toast.success('User blocked')
   }
 
   const acceptRequest = async (friendshipId: string, fromUser: any) => {
     const { error } = await supabase.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId)
     if (error) { toast.error('Could not accept'); return }
+
+    // Notify the requester
+    await supabase.from('notifications').insert({
+      user_id: fromUser.id,
+      actor_id: user.id,
+      type: 'friend_accept',
+      title: 'Friend request accepted!',
+      body: `You are now connected`,
+      link: '/dashboard/friends',
+    })
+
     setRequests(prev => prev.filter((r: any) => r.friendshipId !== friendshipId))
     setFriends(prev => [...prev, fromUser])
-    // Remove from discover
     setUsers(prev => prev.filter(u => u.id !== fromUser.id))
     toast.success(`You and ${fromUser.full_name} are now friends!`)
   }
@@ -142,6 +241,7 @@ export default function FriendsPage() {
     await supabase.from('friendships').delete()
       .or(`and(requester.eq.${user.id},addressee.eq.${friendId}),and(requester.eq.${friendId},addressee.eq.${user.id})`)
     setFriends(prev => prev.filter((f: any) => f.id !== friendId))
+    if (activeChat?.id === friendId) setActiveChat(null)
     toast.success('Unfriended')
   }
 
@@ -162,7 +262,7 @@ export default function FriendsPage() {
       .select('*')
       .or(`and(sender_id.eq.${user.id},recipient_id.eq.${friend.id}),and(sender_id.eq.${friend.id},recipient_id.eq.${user.id})`)
       .order('created_at', { ascending: true })
-      .limit(50)
+      .limit(80)
     const cleared = dmClearedAt[friend.id]
     const visible = (msgs || []).filter((m: any) => !cleared || new Date(m.created_at) > new Date(cleared))
     setMessages(visible)
@@ -174,9 +274,34 @@ export default function FriendsPage() {
     const content = inp.trim()
     setInp('')
     setSending(true)
-    const { data: msg } = await supabase.from('direct_messages').insert({ sender_id: user.id, recipient_id: activeChat.id, content, media_url: dmMediaUrl || null, media_type: dmMediaType || null }).select().single()
-    setDmMediaUrl(''); setDmMediaType(undefined)
-    if (msg) setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg])
+
+    const { data: msg, error } = await supabase
+      .from('direct_messages')
+      .insert({
+        sender_id: user.id,
+        recipient_id: activeChat.id,
+        content: content || null,
+        media_url: dmMediaUrl || null,
+        media_type: dmMediaType || null,
+      })
+      .select()
+      .single()
+
+    setDmMediaUrl('')
+    setDmMediaType(undefined)
+
+    if (msg) {
+      setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg])
+      // Notify recipient
+      await supabase.from('notifications').insert({
+        user_id: activeChat.id,
+        actor_id: user.id,
+        type: 'comment',
+        title: 'New message',
+        body: content ? content.slice(0, 80) : '📎 Sent you media',
+        link: '/dashboard/friends',
+      })
+    }
     setSending(false)
   }
 
@@ -198,30 +323,52 @@ export default function FriendsPage() {
           <button key={id} onClick={() => setTab(id as any)}
             className={`px-4 py-3 text-[13px] font-medium border-b-2 transition-all ${tab === id ? 'border-[#111] text-[#111]' : 'border-transparent text-[#999] hover:text-[#666]'}`}>
             {label}
+            {id === 'requests' && requests.length > 0 && <span className="ml-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full inline-flex items-center justify-center">{requests.length}</span>}
           </button>
         ))}
       </div>
 
+      {/* DISCOVER */}
       {tab === 'discover' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {loading ? <div className="col-span-2 text-center py-8 text-[#999] text-[14px]">Loading...</div>
-          : users.length === 0 ? <div className="col-span-2 text-center py-8 text-[#999] text-[14px]">No new people to discover right now.</div>
-          : users.map(u => (
-            <div key={u.id} className="bg-white border border-[#e8e8e8] rounded-2xl p-4 flex items-center gap-3 hover:border-[#d0d0d0] transition-all">
-              {avatarEl(u)}
-              <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-medium truncate">{u.full_name}</p>
-                <p className="text-[11px] text-[#999] capitalize">{u.plan === 'pro_trial' ? 'Pro trial' : u.plan} member</p>
-              </div>
-              {u.isPending
-                ? <span className="text-[11px] font-medium text-[#b8922a] bg-[#faf3e0] px-3 py-1 rounded-full">Pending...</span>
-                : <button onClick={() => sendRequest(u.id)} className="px-3 py-1.5 bg-[#111] text-white rounded-lg text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors">+ Add</button>
-              }
-            </div>
-          ))}
+          {loading
+            ? <div className="col-span-2 text-center py-8 text-[#999] text-[14px]">Loading...</div>
+            : users.length === 0
+              ? <div className="col-span-2 text-center py-8 text-[#999] text-[14px]">No new people to discover right now.</div>
+              : users.map(u => (
+                <div key={u.id} className="bg-white border border-[#e8e8e8] rounded-2xl p-4 flex items-center gap-3 hover:border-[#d0d0d0] transition-all">
+                  {avatarEl(u)}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-medium truncate">{u.full_name}</p>
+                    <p className="text-[11px] text-[#999] capitalize">{u.plan === 'pro_trial' ? 'Pro trial' : u.plan} member</p>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    {u.isPending ? (
+                      <button
+                        onClick={() => cancelRequest(u.id)}
+                        className="text-[11px] font-medium text-[#b8922a] bg-[#faf3e0] px-3 py-1.5 rounded-full hover:bg-[#f5e8c8] transition-colors"
+                        title="Click to cancel"
+                      >
+                        Pending ✕
+                      </button>
+                    ) : (
+                      <button onClick={() => sendRequest(u.id)} className="px-3 py-1.5 bg-[#111] text-white rounded-lg text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors">+ Add</button>
+                    )}
+                    <button
+                      onClick={() => blockUser(u.id)}
+                      className="w-7 h-7 flex items-center justify-center text-[#ccc] hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                      title="Block user"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                    </button>
+                  </div>
+                </div>
+              ))
+          }
         </div>
       )}
 
+      {/* FRIENDS */}
       {tab === 'friends' && (
         <div>
           {friends.length === 0 ? (
@@ -242,11 +389,17 @@ export default function FriendsPage() {
                     <div className="flex gap-2">
                       <button onClick={() => openChat(f)} className="px-3 py-1.5 bg-[#111] text-white rounded-lg text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors">Message</button>
                       <button onClick={() => unfriend(f.id)} className="px-3 py-1.5 border border-[#e8e8e8] rounded-lg text-[12px] text-[#999] hover:border-red-200 hover:text-red-500 transition-colors">Unfriend</button>
+                      <button
+                        onClick={() => blockUser(f.id)}
+                        className="px-3 py-1.5 border border-[#e8e8e8] rounded-lg text-[12px] text-[#999] hover:border-red-200 hover:text-red-500 transition-colors"
+                        title="Block user"
+                      >
+                        Block
+                      </button>
                     </div>
                   </div>
-                  {/* Shared circles */}
                   {sharedCircles[f.id]?.length > 0 && (
-                    <div className="flex gap-2 flex-wrap mt-1 pl-13">
+                    <div className="flex gap-2 flex-wrap mt-1">
                       <span className="text-[11px] text-[#999]">Shared circles:</span>
                       {sharedCircles[f.id].map((c: any) => (
                         <span key={c.id} className="text-[11px] font-medium text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full">{c.name}</span>
@@ -260,6 +413,7 @@ export default function FriendsPage() {
         </div>
       )}
 
+      {/* REQUESTS */}
       {tab === 'requests' && (
         <div>
           {requests.length === 0
@@ -268,7 +422,10 @@ export default function FriendsPage() {
                 {requests.map((r: any) => (
                   <div key={r.friendshipId} className="bg-white border border-[#e8e8e8] rounded-2xl p-4 flex items-center gap-3">
                     {avatarEl(r)}
-                    <div className="flex-1"><p className="text-[14px] font-medium">{r.full_name}</p><p className="text-[12px] text-[#999]">Wants to connect</p></div>
+                    <div className="flex-1">
+                      <p className="text-[14px] font-medium">{r.full_name}</p>
+                      <p className="text-[12px] text-[#999]">Wants to connect</p>
+                    </div>
                     <div className="flex gap-2">
                       <button onClick={() => acceptRequest(r.friendshipId, r)} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">Accept</button>
                       <button onClick={() => declineRequest(r.friendshipId)} className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#999] hover:border-red-200 hover:text-red-500 transition-colors">Decline</button>
@@ -280,6 +437,7 @@ export default function FriendsPage() {
         </div>
       )}
 
+      {/* MESSAGES */}
       {tab === 'messages' && (
         <div>
           {!activeChat ? (
@@ -295,22 +453,41 @@ export default function FriendsPage() {
                   ))}
                 </div>
           ) : (
-            <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-[#e8e8e8] flex items-center gap-3">
+            <div className="bg-white border border-[#e8e8e8] rounded-2xl overflow-hidden flex flex-col" style={{ height: 520 }}>
+              {/* Header */}
+              <div className="px-5 py-3.5 border-b border-[#e8e8e8] flex items-center gap-3 flex-shrink-0">
                 <button onClick={() => setActiveChat(null)} className="text-[#999] hover:text-[#111] text-[18px] mr-1">←</button>
                 {avatarEl(activeChat)}
-                <div><p className="text-[14px] font-medium">{activeChat.full_name}</p><p className="text-[11px] text-green-500">● Active</p></div>
-                <button onClick={() => clearDM(activeChat.id)} className="ml-auto text-[12px] text-[#999] hover:text-[#666] px-3 py-1.5 border border-[#e8e8e8] rounded-full hover:border-[#d0d0d0] transition-colors">Clear</button>
+                <div className="flex-1">
+                  <p className="text-[14px] font-medium">{activeChat.full_name}</p>
+                  <p className="text-[11px] text-green-500">● Active</p>
+                </div>
+                <button onClick={() => blockUser(activeChat.id)} className="text-[11px] text-[#999] hover:text-red-500 px-3 py-1.5 border border-[#e8e8e8] rounded-full hover:border-red-200 transition-colors">Block</button>
+                <button onClick={() => clearDM(activeChat.id)} className="text-[12px] text-[#999] hover:text-[#666] px-3 py-1.5 border border-[#e8e8e8] rounded-full hover:border-[#d0d0d0] transition-colors">Clear</button>
               </div>
-              <div className="h-[380px] overflow-y-auto p-5 flex flex-col gap-3">
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3 min-h-0">
                 {messages.length === 0 && <div className="text-center text-[#999] text-[13px] mt-8">Start the conversation!</div>}
                 {messages.map((m: any) => {
                   const isMe = m.sender_id === user?.id
                   return (
                     <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[75%] px-4 py-2.5 text-[14px] leading-[1.55] rounded-2xl ${isMe ? 'bg-[#111] text-white rounded-br-sm' : 'bg-[#f8f7f5] text-[#111] rounded-bl-sm'}`}>
-                        {m.content}
-                        <div className={`text-[10px] mt-1 ${isMe ? 'text-white/40' : 'text-[#999]'}`}>
+                      <div className={`max-w-[75%] flex flex-col gap-0.5 ${isMe ? 'items-end' : 'items-start'}`}>
+                        {m.media_url && (
+                          <div className={`rounded-2xl overflow-hidden ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`} style={{ maxWidth: 240 }}>
+                            {m.media_type === 'video'
+                              ? <video src={m.media_url} controls className="w-full max-h-40 object-cover"/>
+                              : <img src={m.media_url} alt="" className="w-full max-h-40 object-cover cursor-pointer" onClick={() => window.open(m.media_url, '_blank')}/>
+                            }
+                          </div>
+                        )}
+                        {m.content && (
+                          <div className={`px-4 py-2.5 text-[14px] leading-[1.55] rounded-2xl ${isMe ? 'bg-[#111] text-white rounded-br-sm' : 'bg-[#f8f7f5] text-[#111] rounded-bl-sm'}`}>
+                            {m.content}
+                          </div>
+                        )}
+                        <div className={`text-[10px] px-1 ${isMe ? 'text-[#bbb]' : 'text-[#ccc]'}`}>
                           {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
@@ -319,13 +496,47 @@ export default function FriendsPage() {
                 })}
                 <div ref={endRef}/>
               </div>
-              <div className="border-t border-[#e8e8e8] flex">
-                <input value={inp} onChange={e => setInp(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendDM()}
-                  placeholder={`Message ${activeChat.full_name}...`} className="flex-1 px-5 py-3.5 text-[14px] outline-none bg-transparent"/>
-                <button onClick={sendDM} disabled={!inp.trim() || sending}
-                  className="px-5 bg-[#111] text-white disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
-                </button>
+
+              {/* Input area */}
+              <div className="border-t border-[#e8e8e8] flex-shrink-0">
+                {dmMediaUrl && (
+                  <div className="px-4 pt-2">
+                    <MediaUploader
+                      onUpload={(url, t) => { setDmMediaUrl(url); setDmMediaType(t) }}
+                      onClear={() => { setDmMediaUrl(''); setDmMediaType(undefined) }}
+                      mediaUrl={dmMediaUrl}
+                      mediaType={dmMediaType}
+                      context="dm"
+                    />
+                  </div>
+                )}
+                <div className="flex items-center gap-2 px-3 py-2">
+                  {/* Media attach button */}
+                  {!dmMediaUrl && (
+                    <MediaUploader
+                      onUpload={(url, t) => { setDmMediaUrl(url); setDmMediaType(t) }}
+                      onClear={() => { setDmMediaUrl(''); setDmMediaType(undefined) }}
+                      context="dm"
+                    />
+                  )}
+                  <input
+                    value={inp}
+                    onChange={e => setInp(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendDM()}
+                    placeholder={`Message ${activeChat.full_name}...`}
+                    className="flex-1 px-4 py-3 text-[14px] outline-none bg-transparent"
+                  />
+                  <button
+                    onClick={sendDM}
+                    disabled={(!inp.trim() && !dmMediaUrl) || sending}
+                    className="w-9 h-9 bg-[#111] text-white rounded-full flex items-center justify-center disabled:opacity-40 hover:bg-[#2a2a2a] transition-colors flex-shrink-0"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="22" y1="2" x2="11" y2="13"/>
+                      <polygon points="22,2 15,22 11,13 2,9"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           )}

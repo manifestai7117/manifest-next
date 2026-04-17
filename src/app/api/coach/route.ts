@@ -61,6 +61,7 @@ export async function POST(request: Request) {
         const totalDays = ({ '1 week': 7, '2 weeks': 14, '1 month': 30, '6 weeks': 42, '2 months': 60, '3 months': 90, '6 months': 180, '1 year': 365, '2 years': 730 } as any)[goal.timeline] || 90
         const daysPassed = Math.floor((Date.now() - new Date(goal.created_at).getTime()) / 86400000)
         const daysLeft = Math.max(0, totalDays - daysPassed)
+
         goalContext = `
 GOAL: "${goal.title}"
 CATEGORY: ${goal.category}
@@ -75,28 +76,75 @@ PHASE 1 TARGET: ${goal.milestone_30 || goal.milestone_1 || 'Not set'}
 PHASE 2 TARGET: ${goal.milestone_60 || goal.milestone_2 || 'Not set'}
 PHASE 3 TARGET: ${goal.milestone_90 || goal.milestone_3 || 'Not set'}
 PHASE COMPLETION STATUS: Phase 1 ${goal.phase1_completed ? `COMPLETED on ${new Date(goal.phase1_completed_at).toLocaleDateString()}` : 'not yet complete'} | Phase 2 ${goal.phase2_completed ? `COMPLETED on ${new Date(goal.phase2_completed_at).toLocaleDateString()}` : 'not yet complete'} | Phase 3 ${goal.phase3_completed ? 'COMPLETED' : 'not yet complete'}
+CURRENT STORY / STATE: ${goal.current_story || 'Not shared yet — ask the user how things are going.'}
 COACH SUMMARY FROM PREVIOUS SESSIONS: ${goal.coach_summary || 'No previous summary yet.'}
 `
       }
     }
 
     // Get recent checkins with notes
-    const { data: checkins } = await supabase.from('checkins').select('note, mood, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10)
+    const { data: checkins } = await supabase
+      .from('checkins')
+      .select('note, mood, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
     const checkinContext = checkins?.length
       ? `\nRECENT CHECK-INS (last ${checkins.length}):\n${checkins.map((c: any) => `- ${new Date(c.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}: mood ${c.mood}/5${c.note ? `, note: "${c.note}"` : ' (no note)'}`).join('\n')}`
       : '\nNo check-ins yet.'
 
+    // Today's task status
+    const todayDate = new Date().toISOString().split('T')[0]
+    let todayTaskContext = ''
+    if (goalId) {
+      const { data: todayTask } = await supabase
+        .from('daily_tasks')
+        .select('*')
+        .eq('goal_id', goalId)
+        .eq('user_id', user.id)
+        .eq('task_date', todayDate)
+        .maybeSingle()
+
+      if (todayTask) {
+        if (todayTask.completed === true) {
+          todayTaskContext = `\nTODAY'S TASK: "${todayTask.task}" — COMPLETED ✓. Note: "${todayTask.completion_note || 'Done'}"`
+        } else if (todayTask.completed === false) {
+          todayTaskContext = `\nTODAY'S TASK: "${todayTask.task}" — NOT completed today.`
+        } else {
+          todayTaskContext = `\nTODAY'S TASK: "${todayTask.task}" — not yet logged as complete or incomplete.`
+        }
+      } else {
+        todayTaskContext = '\nTODAY\'S TASK: Not yet generated for today.'
+      }
+    }
+
+    // Yesterday's task status
+    const yesterdayDate = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+    let yesterdayTaskContext = ''
+    if (goalId) {
+      const { data: yesterdayTask } = await supabase
+        .from('daily_tasks')
+        .select('*')
+        .eq('goal_id', goalId)
+        .eq('user_id', user.id)
+        .eq('task_date', yesterdayDate)
+        .maybeSingle()
+
+      if (yesterdayTask) {
+        yesterdayTaskContext = `\nYESTERDAY'S TASK: "${yesterdayTask.task}" — ${yesterdayTask.completed === true ? `COMPLETED. Note: "${yesterdayTask.completion_note}"` : yesterdayTask.completed === false ? 'NOT completed.' : 'Outcome not logged.'}`
+      }
+    }
+
     // Missed days analysis
-    const today2 = new Date().toISOString().split('T')[0]
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-    const checkedToday = checkins?.some((c: any) => c.created_at.startsWith(today2))
-    const checkedYesterday = checkins?.some((c: any) => c.created_at.startsWith(yesterday))
+    const checkedToday = checkins?.some((c: any) => c.created_at.startsWith(todayDate))
+    const checkedYesterday = checkins?.some((c: any) => c.created_at.startsWith(yesterdayDate))
     const inactivityNote = !checkedToday && !checkedYesterday && (checkins?.length || 0) > 0
       ? '\nNOTE: User has NOT checked in today or yesterday — address this directly if relevant.'
       : checkedToday ? '\nNOTE: User checked in today.' : ''
 
     const systemPrompt = `You are the Manifest AI coach — a sharp, empathetic, results-focused coach who knows this person deeply.
-${goalContext}${checkinContext}${inactivityNote}
+${goalContext}${checkinContext}${todayTaskContext}${yesterdayTaskContext}${inactivityNote}
 
 YOUR PERSONALITY:
 - You have read every check-in note, know their streak, know their why, know their obstacles
@@ -106,6 +154,8 @@ YOUR PERSONALITY:
 - You notice when mood dips and probe gently
 - You connect today's effort to their larger "why"
 - You remember things they told you before and bring them up naturally
+- If today's task is marked complete, acknowledge it specifically and build on it
+- If today's task is not done, gently address it without being preachy
 - When they make excuses, you acknowledge then redirect firmly
 
 FORMAT RULES — CRITICAL:

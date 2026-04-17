@@ -27,7 +27,6 @@ const BOTTOM_NAV = [
   { href: '/dashboard/streak', label: 'Streak', emoji: '⚡' },
 ]
 
-
 function ScrollRestorer({ pathname, children }: { pathname: string; children: React.ReactNode }) {
   const ref = React.useRef<HTMLDivElement>(null)
   const scrollMap = React.useRef<Record<string, number>>({})
@@ -35,17 +34,16 @@ function ScrollRestorer({ pathname, children }: { pathname: string; children: Re
   React.useEffect(() => {
     const el = ref.current
     if (!el) return
-    // Restore scroll for this path
     const saved = scrollMap.current[pathname] || 0
     el.scrollTop = saved
-    // Save scroll as user scrolls
     const onScroll = () => { scrollMap.current[pathname] = el.scrollTop }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
   }, [pathname])
 
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto h-screen md:h-auto">
+    // KEY FIX: overflow-x-hidden + min-w-0 prevents any child from causing horizontal scroll
+    <div ref={ref} className="flex-1 overflow-y-auto overflow-x-hidden h-screen md:h-auto min-w-0">
       {children}
     </div>
   )
@@ -59,10 +57,8 @@ export default function DashboardShell({ children, profile }: { children: React.
   const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
 
   useEffect(() => {
-    // Apply dark mode instantly from localStorage
     const stored = localStorage.getItem('manifest_dark_mode')
     if (stored === 'true') document.documentElement.classList.add('dark')
-    // Then verify with API
     fetch('/api/settings').then(r => r.ok ? r.json() : null).then(data => {
       if (!data) return
       const dm = !!data.dark_mode
@@ -86,7 +82,7 @@ export default function DashboardShell({ children, profile }: { children: React.
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {NAV.map(({ href, label, emoji }) => (
           <Link key={href} href={href} onClick={() => setMobileOpen(false)}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${pathname === href || (href === '/dashboard/circles' && pathname.startsWith('/dashboard/circles')) ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
+            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${pathname === href || (href !== '/dashboard' && pathname.startsWith(href)) ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
             <span className="text-[14px] w-5 text-center flex-shrink-0">{emoji}</span>
             {label}
           </Link>
@@ -96,7 +92,7 @@ export default function DashboardShell({ children, profile }: { children: React.
         {!isPro && (
           <Link href="/dashboard/upgrade"
             className="flex items-center gap-2 px-3 py-2 mb-2 bg-[#faf3e0] rounded-xl text-[11px] font-medium text-[#b8922a] hover:bg-[#f5e8c0] transition-colors">
-            ★ Upgrade to Pro
+            ☆ Upgrade to Pro
           </Link>
         )}
         <Link href="/dashboard/profile"
@@ -107,17 +103,17 @@ export default function DashboardShell({ children, profile }: { children: React.
                 {profile?.full_name?.[0]?.toUpperCase() || '?'}
               </div>
           }
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className={`text-[13px] font-medium truncate ${pathname === '/dashboard/profile' ? 'text-white' : 'text-[#111]'}`}>
-              {profile?.full_name || 'User'}
+              {profile?.full_name || 'Profile'}
             </p>
-            <p className={`text-[11px] ${pathname === '/dashboard/profile' ? 'text-white/50' : 'text-[#999]'}`}>
-              {isPro ? 'Pro' : 'Free'}
+            <p className={`text-[11px] truncate capitalize ${pathname === '/dashboard/profile' ? 'text-white/50' : 'text-[#999]'}`}>
+              {profile?.plan === 'pro_trial' ? 'Pro trial' : profile?.plan || 'free'}
             </p>
           </div>
         </Link>
-        <button onClick={signOut}
-          className="px-3 py-2 w-full text-left text-[13px] text-[#999] hover:text-[#666] transition-colors rounded-xl hover:bg-[#f8f7f5]">
+        <button onClick={signOut} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#999] hover:bg-[#f8f7f5] hover:text-[#111] transition-colors">
+          <span className="text-[14px] w-5 text-center flex-shrink-0">→</span>
           Sign out
         </button>
       </div>
@@ -127,71 +123,60 @@ export default function DashboardShell({ children, profile }: { children: React.
   return (
     <div className="min-h-screen bg-[#f8f7f5] flex">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-[220px] bg-white border-r border-[#e8e8e8] fixed h-full z-30">
+      <div className="hidden md:flex w-[220px] flex-shrink-0 bg-white border-r border-[#e8e8e8] flex-col fixed top-0 left-0 h-screen z-30">
         <Sidebar />
-      </aside>
+      </div>
 
-      {/* Mobile overlay */}
+      {/* Mobile sidebar overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)}/>
-          <aside className="absolute left-0 top-0 bottom-0 w-[280px] bg-white shadow-2xl overflow-y-auto">
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div className="w-[260px] bg-white h-full shadow-2xl flex flex-col">
             <Sidebar />
-          </aside>
+          </div>
+          <div className="flex-1 bg-black/40" onClick={() => setMobileOpen(false)}/>
         </div>
       )}
 
-      {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-[#e8e8e8] flex items-center justify-between px-4 z-40">
-        <Link href="/" className="font-serif text-[20px] text-[#111]">
-          manifest<span className="text-[#b8922a]">.</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <NotificationBell />
-          {/* Hamburger — three lines, perfectly aligned right */}
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="flex flex-col justify-center items-end gap-[5px] w-6 h-6"
-            aria-label="Menu"
-          >
-            <span className="block w-[22px] h-[2px] bg-[#111] rounded-full"/>
-            <span className="block w-[22px] h-[2px] bg-[#111] rounded-full"/>
-            <span className="block w-[14px] h-[2px] bg-[#111] rounded-full"/>
+      {/* Main content */}
+      <div className="flex-1 md:ml-[220px] flex flex-col min-w-0">
+        {/* Top bar */}
+        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-[#e8e8e8] px-5 py-3 flex items-center justify-between flex-shrink-0">
+          <button onClick={() => setMobileOpen(true)} className="md:hidden p-1.5 rounded-lg hover:bg-[#f0ede8] transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
           </button>
+          <div className="md:hidden font-serif text-[18px] text-[#111]">
+            manifest<span className="text-[#b8922a]">.</span>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <NotificationBell />
+          </div>
+        </div>
+
+        {/* Page content — KEY: overflow-x-hidden prevents horizontal scroll on mobile */}
+        <ScrollRestorer pathname={pathname}>
+          <main className="flex-1 px-5 py-6 pb-24 md:pb-6 max-w-full overflow-x-hidden min-w-0">
+            {children}
+          </main>
+        </ScrollRestorer>
+
+        {/* Mobile bottom nav */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e8e8e8] flex md:hidden z-20 safe-area-pb">
+          {BOTTOM_NAV.map(({ href, label, emoji }) => {
+            const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+            return (
+              <Link key={href} href={href}
+                className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-colors ${active ? 'text-[#111]' : 'text-[#bbb]'}`}>
+                <span className="text-[18px] leading-none">{emoji}</span>
+                <span className="text-[9px] font-medium">{label}</span>
+              </Link>
+            )
+          })}
         </div>
       </div>
-
-      {/* Main content */}
-      <main className="flex-1 md:ml-[220px] min-h-screen">
-        <div className="hidden md:flex items-center justify-end px-6 py-3 border-b border-[#e8e8e8] bg-white sticky top-0 z-20">
-          <NotificationBell />
-        </div>
-        <ScrollRestorer pathname={pathname}>
-          <div className="p-4 md:p-8 pt-20 md:pt-6 pb-24 md:pb-8">
-            {children}
-          </div>
-        </ScrollRestorer>
-      </main>
-
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#e8e8e8] z-40 flex items-stretch">
-        {BOTTOM_NAV.map(({ href, label, emoji }) => {
-          const active = pathname === href
-          return (
-            <Link key={href} href={href}
-              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors ${active ? 'text-[#111]' : 'text-[#bbb]'}`}>
-              <span className={`text-[16px] leading-none ${active ? 'opacity-100' : 'opacity-50'}`}>{emoji}</span>
-              <span className={`text-[9px] font-medium ${active ? 'text-[#111]' : 'text-[#bbb]'}`}>{label}</span>
-            </Link>
-          )
-        })}
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[#bbb]">
-          <span className="text-[16px] leading-none opacity-50">☰</span>
-          <span className="text-[9px] font-medium">More</span>
-        </button>
-      </nav>
     </div>
   )
 }
