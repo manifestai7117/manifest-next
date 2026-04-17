@@ -1,13 +1,6 @@
 {
-  "functions": {
-    "src/app/api/vision-art/options/route.ts": {
-      "maxDuration": 300
-    },
-    "src/app/api/coach/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/media/route.ts": {
-      "maxDuration": 60
-    }
-  }
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install"
 }
