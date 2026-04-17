@@ -92,16 +92,13 @@ export async function POST(request: Request) {
 
     const { data: { publicUrl } } = supabase.storage.from('user-media').getPublicUrl(path)
 
-    await supabase.from('media_uploads').insert({
-      user_id: user.id,
-      storage_path: path,
-      public_url: publicUrl,
-      media_type: isImage ? 'image' : 'video',
-      mime_type: mimeType,
-      size_bytes: file.size,
-      moderation_status: 'approved',
-      context,
-    }).catch(() => {}) // non-fatal if audit log fails
+    try {
+      await supabase.from('media_uploads').insert({
+        user_id: user.id, storage_path: path, public_url: publicUrl,
+        media_type: isImage ? 'image' : 'video', mime_type: mimeType,
+        size_bytes: file.size, moderation_status: 'approved', context,
+      })
+    } catch {} // non-fatal if audit log fails
 
     return NextResponse.json({ url: publicUrl, type: isImage ? 'image' : 'video' })
   } catch (error: any) {

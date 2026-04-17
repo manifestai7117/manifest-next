@@ -116,11 +116,9 @@ STRICT FORMAT RULES:
   const insight = stripMarkdown(rawInsight)
 
   if (insight) {
-    await supabase.from('goal_insights').insert({
-      goal_id: goalId,
-      user_id: user.id,
-      insight,
-    }).catch(() => {})
+    try {
+      await supabase.from('goal_insights').insert({ goal_id: goalId, user_id: user.id, insight })
+    } catch {}
   }
 
   return NextResponse.json({ insight, fresh: true })
