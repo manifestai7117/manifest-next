@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -24,6 +24,14 @@ export default function VisionArtPage() {
   const [tab, setTab] = useState<'art'|'print'>('art')
   const [printOrdered, setPrintOrdered] = useState<string[]>([])
 
+  // Selfie state
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null)
+  const [selfieUrl, setSelfieUrl] = useState<string | null>(null)
+  const [selfiePermission, setSelfiePermission] = useState(false)
+  const [uploadingSelfie, setUploadingSelfie] = useState(false)
+  const [showSelfiePanel, setShowSelfiePanel] = useState(false)
+  const selfieRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -40,6 +48,11 @@ export default function VisionArtPage() {
       if (g) {
         const cached = localStorage.getItem(`vb_options_${g.id}`)
         if (cached) try { const p = JSON.parse(cached); setOptions(p.options || []); setChosenIdx(p.chosen ?? null) } catch {}
+        // Load saved selfie from goal
+        if (g.selfie_url && g.selfie_permission) {
+          setSelfieUrl(g.selfie_url)
+          setSelfiePermission(true)
+        }
       }
       setLoading(false)
     }
@@ -52,6 +65,49 @@ export default function VisionArtPage() {
     const cached = localStorage.getItem(`vb_options_${g.id}`)
     if (cached) try { const p = JSON.parse(cached); setOptions(p.options || []); setChosenIdx(p.chosen ?? null) } catch {}
     localStorage.setItem('selectedGoalId', g.id)
+    // Load selfie for this goal
+    if (g.selfie_url && g.selfie_permission) {
+      setSelfieUrl(g.selfie_url); setSelfiePermission(true)
+    } else {
+      setSelfieUrl(null); setSelfiePermission(false); setSelfiePreview(null)
+    }
+  }
+
+  const handleSelfie = async (file: File) => {
+    if (uploadingSelfie) return
+    setUploadingSelfie(true)
+    // Show preview immediately
+    const reader = new FileReader()
+    reader.onload = e => setSelfiePreview(e.target?.result as string)
+    reader.readAsDataURL(file)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('context', 'selfie')
+      const res = await fetch('/api/media', { method: 'POST', body: form })
+      const d = await res.json()
+      if (!res.ok) { toast.error(d.error || 'Upload failed'); setSelfiePreview(null); setUploadingSelfie(false); return }
+      setSelfieUrl(d.url)
+      toast.success('Photo uploaded!')
+    } catch { toast.error('Upload failed'); setSelfiePreview(null) }
+    setUploadingSelfie(false)
+  }
+
+  const saveSelfieToGoal = async () => {
+    if (!selectedGoal || !selfieUrl) return
+    await supabase.from('goals').update({ selfie_url: selfieUrl, selfie_permission: selfiePermission }).eq('id', selectedGoal.id)
+    await supabase.from('profiles').update({ selfie_url: selfieUrl }).eq('id', profile?.id)
+    setSelectedGoal((prev: any) => ({ ...prev, selfie_url: selfieUrl, selfie_permission: selfiePermission }))
+    setShowSelfiePanel(false)
+    toast.success(selfiePermission ? 'Photo saved — your vision art will reflect you!' : 'Photo saved (not used in art)')
+  }
+
+  const removeSelfie = async () => {
+    setSelfieUrl(null); setSelfiePreview(null); setSelfiePermission(false)
+    if (selectedGoal) {
+      await supabase.from('goals').update({ selfie_url: null, selfie_permission: false }).eq('id', selectedGoal.id)
+    }
+    toast.success('Photo removed')
   }
 
   const generate = async () => {
@@ -109,6 +165,7 @@ export default function VisionArtPage() {
   const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
   const hasChosen = chosenIdx !== null && options[chosenIdx]
   const chosenImage = hasChosen ? options[chosenIdx] : null
+  const hasSelfie = !!(selfieUrl && selfiePermission)
 
   return (
     <div className="fade-up max-w-[960px]">
@@ -116,14 +173,27 @@ export default function VisionArtPage() {
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
           <h1 className="font-serif text-[32px] mb-1">Vision Art & Print Shop</h1>
-          <p className="text-[14px] text-[#666]">{selectedGoal.user_city ? `Personalised for you in ${selectedGoal.user_city}` : 'AI-generated art for your goal'}</p>
+          <p className="text-[14px] text-[#666]">
+            {hasSelfie ? '✦ Personalised with your photo' : selectedGoal.user_city ? `Personalised for you in ${selectedGoal.user_city}` : 'AI-generated art for your goal'}
+          </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {hasChosen && isPro && <button onClick={download} className="flex items-center gap-2 px-4 py-2.5 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5]"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download</button>}
-          {hasChosen && !emailSent && <button onClick={sendEmail} disabled={sendingEmail} className="flex items-center gap-2 px-4 py-2.5 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] disabled:opacity-50">{sendingEmail ? 'Sending...' : '✉ Email to me'}</button>}
+          {hasChosen && isPro && (
+            <button onClick={download} className="flex items-center gap-2 px-4 py-2.5 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5]">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download
+            </button>
+          )}
+          {hasChosen && !emailSent && (
+            <button onClick={sendEmail} disabled={sendingEmail} className="flex items-center gap-2 px-4 py-2.5 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] disabled:opacity-50">
+              {sendingEmail ? 'Sending...' : '✉ Email to me'}
+            </button>
+          )}
           {emailSent && <span className="px-4 py-2.5 text-[13px] text-green-600 font-medium">✓ Sent!</span>}
           <button onClick={generate} disabled={generating} className="flex items-center gap-2 px-4 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50">
-            {generating ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full spin-anim"/>Generating...</> : options.length > 0 ? 'Regenerate ↺' : '✦ Generate vision art'}
+            {generating
+              ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full spin-anim"/>Generating...</>
+              : options.length > 0 ? 'Regenerate ↺' : '✦ Generate vision art'}
           </button>
         </div>
       </div>
@@ -139,7 +209,98 @@ export default function VisionArtPage() {
         </div>
       )}
 
-      {/* Tabs: Art / Print */}
+      {/* ─── Selfie personalisation panel ──────────────────────── */}
+      <div className="bg-white border border-[#e8e8e8] rounded-2xl p-4 mb-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {(selfiePreview || selfieUrl) ? (
+              <img src={selfiePreview || selfieUrl || ''} alt="Your photo" className="w-10 h-10 rounded-full object-cover border-2 border-[#b8922a]/30"/>
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-[#f2f0ec] flex items-center justify-center text-[20px]">📸</div>
+            )}
+            <div>
+              <p className="text-[13px] font-medium">
+                {hasSelfie ? 'Your photo is being used in vision art' : 'Make art look like you'}
+              </p>
+              <p className="text-[11px] text-[#999]">
+                {hasSelfie ? 'AI will include your likeness in generated images' : 'Upload a selfie to personalise your vision art'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowSelfiePanel(!showSelfiePanel)}
+            className="px-3 py-1.5 border border-[#e8e8e8] rounded-xl text-[12px] text-[#666] hover:bg-[#f8f7f5] transition-colors"
+          >
+            {showSelfiePanel ? 'Close' : hasSelfie ? 'Change' : 'Add photo'}
+          </button>
+        </div>
+
+        {showSelfiePanel && (
+          <div className="mt-4 pt-4 border-t border-[#f0ede8]">
+            <input
+              ref={selfieRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleSelfie(f); e.target.value = '' }}
+            />
+
+            {selfiePreview || selfieUrl ? (
+              <div className="flex items-start gap-4 mb-4">
+                <div className="relative">
+                  <img src={selfiePreview || selfieUrl || ''} alt="Preview" className="w-20 h-20 rounded-2xl object-cover"/>
+                  {uploadingSelfie && (
+                    <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center">
+                      <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin-anim"/>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-xl p-3 mb-3">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selfiePermission}
+                        onChange={e => setSelfiePermission(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-[#b8922a]"
+                      />
+                      <span className="text-[12px] text-[#666] leading-[1.5]">
+                        I give permission for my photo to be used to create AI vision art. My photo is only used for art generation and is never shared publicly.
+                      </span>
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={saveSelfieToGoal} disabled={uploadingSelfie}
+                      className="px-4 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium hover:bg-[#2a2a2a] disabled:opacity-40 transition-colors">
+                      Save
+                    </button>
+                    <button onClick={() => selfieRef.current?.click()} disabled={uploadingSelfie}
+                      className="px-4 py-2 border border-[#e8e8e8] rounded-xl text-[12px] text-[#666] hover:bg-[#f8f7f5] transition-colors">
+                      Change photo
+                    </button>
+                    <button onClick={removeSelfie}
+                      className="px-4 py-2 border border-red-100 text-red-400 rounded-xl text-[12px] hover:bg-red-50 transition-colors">
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => selfieRef.current?.click()}
+                disabled={uploadingSelfie}
+                className="w-full py-4 border-2 border-dashed border-[#e8e8e8] rounded-2xl flex flex-col items-center gap-2 hover:border-[#b8922a]/40 transition-colors"
+              >
+                <div className="text-[28px]">📸</div>
+                <p className="text-[13px] font-medium text-[#111]">Upload a selfie or photo</p>
+                <p className="text-[11px] text-[#999]">JPG, PNG or WebP · Max 10MB</p>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
       <div className="flex gap-1 p-1 bg-[#f2f0ec] rounded-xl mb-5 w-fit">
         <button onClick={() => setTab('art')} className={`px-5 py-2 rounded-lg text-[13px] font-medium transition-all ${tab === 'art' ? 'bg-white shadow-sm text-[#111]' : 'text-[#666]'}`}>✦ Vision Art</button>
         <button onClick={() => setTab('print')} className={`px-5 py-2 rounded-lg text-[13px] font-medium transition-all ${tab === 'print' ? 'bg-white shadow-sm text-[#111]' : 'text-[#666]'}`}>🖼 Print Shop</button>
@@ -152,25 +313,27 @@ export default function VisionArtPage() {
             <div className="rounded-2xl bg-gradient-to-br from-[#0d1117] to-[#1a2332] p-12 text-center mb-6">
               <div className="w-12 h-12 border-2 border-white/10 border-t-[#b8922a] rounded-full spin-anim mx-auto mb-6"/>
               <p className="font-serif italic text-white/60 text-[20px] mb-3">Creating 3 personalised visions...</p>
-              <p className="text-white/30 text-[13px] max-w-[320px] mx-auto leading-[1.7]">Claude is writing scene concepts for your goal, then generating each image</p>
+              {hasSelfie && <p className="text-[#b8922a] text-[12px] mb-3">✦ Including your photo</p>}
+              <p className="text-white/30 text-[13px] max-w-[320px] mx-auto leading-[1.7]">Writing scene concepts, then generating each image</p>
             </div>
           )}
 
           {!generating && options.length > 0 && (
             <>
-              {/* Separator */}
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-px flex-1 bg-[#e8e8e8]"/>
                 <p className="text-[11px] font-bold tracking-[.14em] uppercase text-[#999]">{chosenIdx === null ? '✦ Choose your vision' : '✦ Suggested visions'}</p>
                 <div className="h-px flex-1 bg-[#e8e8e8]"/>
               </div>
-
               <div className={`grid gap-4 mb-6 ${options.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
                 {options.map((opt, i) => (
                   <div key={i} onClick={() => chooseOption(i)}
                     className={`rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${chosenIdx === i ? 'ring-4 ring-[#b8922a] shadow-2xl scale-[1.02]' : chosenIdx !== null ? 'opacity-40 hover:opacity-60' : 'hover:shadow-xl hover:scale-[1.01]'}`}>
                     <div className="relative" style={{ aspectRatio: '3/4' }}>
-                      {opt.imageUrl ? <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-[#f0ede8] flex items-center justify-center"><p className="text-[#999] text-[13px]">Unavailable</p></div>}
+                      {opt.imageUrl
+                        ? <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover"/>
+                        : <div className="w-full h-full bg-[#f0ede8] flex items-center justify-center"><p className="text-[#999] text-[13px]">Unavailable</p></div>
+                      }
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4">
                         <p className="font-serif italic text-white text-[16px] leading-tight">{opt.label}</p>
                         <p className="text-white/50 text-[11px] mt-1">{opt.description}</p>
@@ -182,7 +345,6 @@ export default function VisionArtPage() {
                 ))}
               </div>
 
-              {/* Chosen art detail */}
               {chosenImage && (
                 <>
                   <div className="flex items-center gap-3 my-5">
@@ -218,7 +380,9 @@ export default function VisionArtPage() {
             <div className="rounded-2xl border-2 border-dashed border-[#e8e8e8] p-16 text-center">
               <p className="text-[48px] mb-4">✦</p>
               <p className="font-serif text-[20px] mb-2">Your vision awaits</p>
-              <p className="text-[13px] text-[#999] max-w-[280px] mx-auto mb-6 leading-[1.7]">Generate 3 personalised AI images for your goal — choose the one that calls to you</p>
+              <p className="text-[13px] text-[#999] max-w-[280px] mx-auto mb-6 leading-[1.7]">
+                Generate 3 personalised AI images for your goal{hasSelfie ? ' — including your likeness' : ''}
+              </p>
               <button onClick={generate} disabled={generating} className="px-6 py-3 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">✦ Generate my vision art</button>
             </div>
           )}
@@ -238,7 +402,6 @@ export default function VisionArtPage() {
               <button onClick={() => setTab('art')} className="ml-auto px-3 py-1.5 bg-[#b8922a] text-white rounded-xl text-[12px] font-medium flex-shrink-0">Create art →</button>
             </div>
           )}
-
           {(selectedGoal?.art_image_url || hasChosen) && (
             <div className="flex items-start gap-4 bg-[#111] rounded-2xl p-4 mb-5">
               <img src={hasChosen ? options[chosenIdx!]?.imageUrl : selectedGoal.art_image_url} alt="" className="w-20 h-24 object-cover rounded-xl flex-shrink-0"/>
@@ -249,7 +412,6 @@ export default function VisionArtPage() {
               </div>
             </div>
           )}
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             {PRINT_PRODUCTS.map(p => (
               <div key={p.type} className={`bg-white rounded-2xl p-6 text-center relative ${p.featured ? 'border-2 border-[#111]' : 'border border-[#e8e8e8]'}`}>
@@ -259,20 +421,13 @@ export default function VisionArtPage() {
                 <p className="text-[13px] text-[#999] mb-1">{p.size}</p>
                 <p className="text-[12px] text-[#999] mb-4 leading-[1.5]">{p.desc}</p>
                 <p className="font-serif text-[36px] mb-4">{p.price}</p>
-                <button onClick={() => { setPrintOrdered(prev => [...prev, p.type]); toast.success(`${p.type} ordered! Stripe integration connects your Printful account for fulfillment.`) }}
+                <button onClick={() => { setPrintOrdered(prev => [...prev, p.type]); toast.success(`${p.type} ordered!`) }}
                   disabled={printOrdered.includes(p.type)}
                   className={`w-full py-2.5 rounded-xl text-[13px] font-medium transition-colors ${printOrdered.includes(p.type) ? 'bg-green-50 text-green-700 border border-green-200' : p.featured ? 'bg-[#111] text-white hover:bg-[#2a2a2a]' : 'border border-[#d0d0d0] hover:bg-[#f8f7f5]'}`}>
                   {printOrdered.includes(p.type) ? '✓ Ordered!' : 'Order now'}
                 </button>
               </div>
             ))}
-          </div>
-          <div className="bg-[#f8f7f5] border border-[#e8e8e8] rounded-2xl p-5 flex gap-4 items-start">
-            <span className="text-[20px]">🌟</span>
-            <div>
-              <p className="font-medium text-[14px] mb-1">Automated print fulfillment</p>
-              <p className="text-[13px] text-[#666] leading-[1.65]">Connect Printful or Gelato to your Stripe checkout. When someone orders, the print is produced and shipped automatically.</p>
-            </div>
           </div>
         </div>
       )}

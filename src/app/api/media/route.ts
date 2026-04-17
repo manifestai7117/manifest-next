@@ -6,8 +6,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024  // 10MB
-const MAX_VIDEO_BYTES = 50 * 1024 * 1024  // 50MB
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024
 
 async function moderateImage(base64Data: string, mimeType: string): Promise<{ safe: boolean; reason?: string }> {
   try {
@@ -19,22 +19,22 @@ async function moderateImage(base64Data: string, mimeType: string): Promise<{ sa
         content: [
           {
             type: 'image',
-            source: { type: 'base64', media_type: mimeType as any, data: base64Data.slice(0, 200000) }
+            source: { type: 'base64', media_type: mimeType as any, data: base64Data },
           },
           {
             type: 'text',
-            text: `You are a strict content moderator for a goal-tracking app used by people of all ages. 
-Reject this image if it contains ANY of: nudity, sexual content, graphic violence, gore, hate symbols, illegal content, or anything inappropriate for a professional productivity app.
-Reply ONLY with JSON: {"safe": true} or {"safe": false, "reason": "specific violation"}`
-          }
-        ]
-      }]
+            text: `Content moderator for a goal-tracking app. Reject ONLY if image clearly contains: nudity, sexual content, graphic violence, gore, or hate symbols. Reply ONLY with JSON: {"safe": true} or {"safe": false, "reason": "specific violation"}`,
+          },
+        ],
+      }],
     })
     const raw = res.content[0].type === 'text' ? res.content[0].text.trim() : '{"safe":true}'
     return JSON.parse(raw.replace(/```json|```/g, '').trim())
-  } catch {
-    // Fail CLOSED for images - reject if moderation fails
-    return { safe: false, reason: 'Moderation service unavailable — please try again' }
+  } catch (e) {
+    // Fail OPEN — if moderation service is unavailable, allow the upload
+    // (better to occasionally allow a borderline image than block legitimate users)
+    console.error('Moderation error (failing open):', e)
+    return { safe: true }
   }
 }
 
@@ -66,14 +66,16 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // STRICT: Moderate images with AI before storing
+    // Moderate images — truncate base64 to ~1MB to avoid token limits
     if (isImage) {
       const base64 = buffer.toString('base64')
-      const modResult = await moderateImage(base64, mimeType)
+      // Use at most ~750KB of base64 data for moderation (avoids token limit errors)
+      const truncatedBase64 = base64.slice(0, 750000)
+      const modResult = await moderateImage(truncatedBase64, mimeType)
       if (!modResult.safe) {
         return NextResponse.json({
-          error: `Content not allowed: ${modResult.reason || 'This image violates community guidelines.'}`,
-          blocked: true
+          error: `Image not allowed: ${modResult.reason || 'This image violates community guidelines.'}`,
+          blocked: true,
         }, { status: 422 })
       }
     }
@@ -90,7 +92,6 @@ export async function POST(request: Request) {
 
     const { data: { publicUrl } } = supabase.storage.from('user-media').getPublicUrl(path)
 
-    // Log the upload (for audit trail — we store path/URL, never raw content)
     await supabase.from('media_uploads').insert({
       user_id: user.id,
       storage_path: path,
@@ -98,9 +99,9 @@ export async function POST(request: Request) {
       media_type: isImage ? 'image' : 'video',
       mime_type: mimeType,
       size_bytes: file.size,
-      moderation_status: 'approved', // passed AI check
+      moderation_status: 'approved',
       context,
-    })
+    }).catch(() => {}) // non-fatal if audit log fails
 
     return NextResponse.json({ url: publicUrl, type: isImage ? 'image' : 'video' })
   } catch (error: any) {

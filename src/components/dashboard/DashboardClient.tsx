@@ -27,7 +27,7 @@ const AFFIRMATIONS_EXTRA = [
   'I am building the version of myself I have always wanted to be.',
   'The work I do today compounds into the life I want tomorrow.',
   'Discipline is freedom.',
-  'I do not wait for motivation — I create momentum.',
+  'I do not wait for motivation â€” I create momentum.',
   'My consistency is my superpower.',
 ]
 
@@ -70,7 +70,7 @@ function DailyTaskCard({ goalId, fallbackAction }: { goalId: string; fallbackAct
       <div className="mb-4">
         <button onClick={generate} disabled={generating}
           className="w-full py-3 border-2 border-dashed border-[#b8922a]/40 rounded-2xl text-[13px] text-[#b8922a] hover:border-[#b8922a]/70 transition-colors flex items-center justify-center gap-2">
-          {generating ? <><span className="w-3 h-3 border-2 border-[#b8922a]/30 border-t-[#b8922a] rounded-full spin-anim"/>Generating...</> : "⚡ Get today's task"}
+          {generating ? <><span className="w-3 h-3 border-2 border-[#b8922a]/30 border-t-[#b8922a] rounded-full spin-anim"/>Generating...</> : "âš¡ Get today's task"}
         </button>
       </div>
     )
@@ -81,13 +81,13 @@ function DailyTaskCard({ goalId, fallbackAction }: { goalId: string; fallbackAct
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1">
           <p className="text-[10px] font-bold tracking-[.12em] uppercase text-[#b8922a] mb-2">
-            {task?.completed ? "✓ Today's task — done!" : "⚡ Do this today"}
+            {task?.completed ? "âœ“ Today's task â€” done!" : "âš¡ Do this today"}
           </p>
           <p className="text-[14px] text-[#111] leading-[1.7] font-medium">{displayText}</p>
         </div>
         {!task?.completed && task && (
           <button onClick={markDone} className="flex-shrink-0 px-3 py-1.5 bg-[#111] text-white rounded-xl text-[12px] font-medium hover:bg-[#2a2a2a] transition-colors">
-            Done ✓
+            Done âœ“
           </button>
         )}
       </div>
@@ -120,7 +120,7 @@ export default function DashboardClient({
   const recentCheckins = allCheckins[goal.id] || []
   const coachMsg = allCoachMsgs[goal.id] || goal.coach_opening || ''
 
-  // Rich daily affirmations — rotates daily, uses goal context
+  // Rich daily affirmations â€” rotates daily, uses goal context
   const allAffirmations = [
     goal.affirmation,
     ...AFFIRMATIONS_EXTRA,
@@ -163,21 +163,21 @@ export default function DashboardClient({
         <div className="flex items-center gap-2 mb-3">
           <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"/>
           <p className="text-[12px] text-[#999]">
-            Last logged: {new Date(recentCheckins[0]?.created_at || '').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-            {recentCheckins[0]?.note ? ` — "${recentCheckins[0].note.slice(0, 60)}${recentCheckins[0].note.length > 60 ? '...' : ''}"` : ''}
+            Last logged: {(() => { const d = recentCheckins[0]?.created_at ? new Date(recentCheckins[0].created_at) : null; return (d && !isNaN(d.getTime())) ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'recently'; })()}
+            {recentCheckins[0]?.note ? ` â€” "${recentCheckins[0].note.slice(0, 60)}${recentCheckins[0].note.length > 60 ? '...' : ''}"` : ''}
           </p>
         </div>
       )}
       <p className="text-[#666] mb-5 text-[14px]">
         {checkedInToday
-          ? `Checked in today ✓ · ${goal.streak} day streak 🔥`
+          ? `Checked in today âœ“ Â· ${goal.streak} day streak ðŸ”¥`
           : "You haven't checked in yet today. Keep the streak alive."}
       </p>
 
       {/* Weekly momentum tip */}
       {goal.streak > 0 && goal.streak % 7 === 0 && (
         <div className="bg-gradient-to-r from-[#b8922a] to-[#9a7820] rounded-2xl p-4 mb-4 flex items-center gap-3">
-          <span className="text-[28px]">🎉</span>
+          <span className="text-[28px]">ðŸŽ‰</span>
           <div>
             <p className="font-medium text-white text-[14px]">{goal.streak}-day streak milestone!</p>
             <p className="text-white/70 text-[12px]">You've completed {goal.streak} consecutive days. Share this win on your feed.</p>
@@ -189,8 +189,8 @@ export default function DashboardClient({
       {/* Accountability nudges */}
       {nudges.filter((_, i) => !dismissedNudges.includes(i)).map((nudge, i) => (
         <div key={i} className="bg-[#111] rounded-xl p-3.5 mb-3 flex items-center justify-between gap-3">
-          <p className="text-[13px] text-white/80">⚡ {nudge}</p>
-          <button onClick={() => setDismissedNudges(p => [...p, i])} className="text-white/30 hover:text-white/60 text-[16px] flex-shrink-0">×</button>
+          <p className="text-[13px] text-white/80">âš¡ {nudge}</p>
+          <button onClick={() => setDismissedNudges(p => [...p, i])} className="text-white/30 hover:text-white/60 text-[16px] flex-shrink-0">Ã—</button>
         </div>
       ))}
 
@@ -220,7 +220,7 @@ export default function DashboardClient({
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         {[
-          { val: `${goal.streak}`, label: 'Day streak 🔥' },
+          { val: `${goal.streak}`, label: 'Day streak ðŸ”¥' },
           { val: `${goal.progress}%`, label: 'Goal progress', progress: goal.progress },
           { val: `${recentCheckins.length}`, label: 'This week' },
           { val: daysRemaining !== null ? `${daysRemaining}d left` : goal.timeline, label: 'Remaining' },
@@ -245,14 +245,14 @@ export default function DashboardClient({
           <div className="flex gap-2 flex-wrap">
             <span className="text-[11px] font-medium text-[#b8922a] bg-[#faf3e0] px-2.5 py-1 rounded-full">{goal.timeline}</span>
             <span className="text-[11px] font-medium text-[#666] bg-[#f2f0ec] px-2.5 py-1 rounded-full">{goal.category}</span>
-            {avgMood >= 4 && <span className="text-[11px] font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">High energy 🔥</span>}
-            {avgMood <= 2 && <span className="text-[11px] font-medium text-[#999] bg-[#f2f0ec] px-2.5 py-1 rounded-full">Tough week 💪</span>}
+            {avgMood >= 4 && <span className="text-[11px] font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">High energy ðŸ”¥</span>}
+            {avgMood <= 2 && <span className="text-[11px] font-medium text-[#999] bg-[#f2f0ec] px-2.5 py-1 rounded-full">Tough week ðŸ’ª</span>}
           </div>
         </div>
         <Link href="/dashboard/coach" className="bg-white border border-[#e8e8e8] rounded-2xl p-5 block hover:border-[#d0d0d0] transition-colors group">
           <p className="text-[10px] font-medium tracking-[.12em] uppercase text-[#b8922a] mb-3">Coach message</p>
           <p className="font-serif italic text-[14px] text-[#666] leading-[1.7] line-clamp-3">"{coachMsg}"</p>
-          <p className="text-[12px] text-[#b8922a] mt-3 group-hover:underline">Continue with coach →</p>
+          <p className="text-[12px] text-[#b8922a] mt-3 group-hover:underline">Continue with coach â†’</p>
         </Link>
       </div>
 
@@ -275,7 +275,7 @@ export default function DashboardClient({
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium truncate">{g.title}</p>
                 </div>
-                <span className="text-[11px] text-[#b8922a] font-medium flex-shrink-0">{g.streak}🔥</span>
+                <span className="text-[11px] text-[#b8922a] font-medium flex-shrink-0">{g.streak}ðŸ”¥</span>
                 <div className="w-20 h-1.5 bg-[#f0ede8] rounded-full overflow-hidden flex-shrink-0">
                   <div className="h-full bg-[#b8922a] rounded-full" style={{ width: `${g.progress}%` }}/>
                 </div>
@@ -290,7 +290,7 @@ export default function DashboardClient({
       {!ratingDismissed && goal.streak >= 3 && (
         <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap mb-4">
           {ratingSubmitted ? (
-            <p className="text-[14px] text-[#666] w-full text-center">Thanks for rating Manifest! ⭐</p>
+            <p className="text-[14px] text-[#666] w-full text-center">Thanks for rating Manifest! â­</p>
           ) : (
             <>
               <div>
@@ -301,12 +301,12 @@ export default function DashboardClient({
                 <div className="flex gap-1">
                   {[1,2,3,4,5].map(s => (
                     <button key={s} onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} onClick={() => setRating(s)} className="text-[24px] transition-transform hover:scale-125">
-                      <span style={{ color: s <= (hoverRating || rating) ? '#b8922a' : '#e8e8e8' }}>★</span>
+                      <span style={{ color: s <= (hoverRating || rating) ? '#b8922a' : '#e8e8e8' }}>â˜…</span>
                     </button>
                   ))}
                 </div>
                 {rating > 0 && <button onClick={submitRating} className="px-4 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium">Submit</button>}
-                <button onClick={() => setRatingDismissed(true)} className="text-[#ccc] hover:text-[#999] text-[20px] leading-none">×</button>
+                <button onClick={() => setRatingDismissed(true)} className="text-[#ccc] hover:text-[#999] text-[20px] leading-none">Ã—</button>
               </div>
             </>
           )}
