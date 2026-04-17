@@ -85,20 +85,19 @@ export default function CirclesPage() {
         },
         async (payload) => {
           const newMsg = payload.new as any
-          // Avoid duplicates (we already add our own messages optimistically)
+          // Skip if we already have this message (sent by us via sendMsg)
           setMsgs(prev => {
             if (prev.find(m => m.id === newMsg.id)) return prev
-            // Fetch profile for the message sender
-            return [...prev, newMsg]
+            return prev // hold off until we fetch the full row with profile + media
           })
-          // Fetch full message with profile data
+          // Always fetch the full row — payload.new doesn't include joined columns
           const { data: fullMsg } = await supabase
             .from('circle_messages')
             .select('*, profiles:profiles(id, full_name, avatar_url)')
             .eq('id', newMsg.id)
             .single()
           if (fullMsg) {
-            setMsgs(prev => prev.map(m => m.id === fullMsg.id ? fullMsg : m))
+            setMsgs(prev => prev.find(m => m.id === fullMsg.id) ? prev : [...prev, fullMsg])
           }
         }
       )
@@ -171,45 +170,36 @@ export default function CirclesPage() {
   const sendMsg = async () => {
     if ((!inp.trim() && !circleMediaUrl) || sending || !activeCircle || !user) return
     const text = inp.trim()
+    const mediaUrl = circleMediaUrl
+    const mediaType = circleMediaType
     setInp('')
-    setSending(true)
-
-    // Optimistic: add a placeholder immediately
-    const tempId = `temp-${Date.now()}`
-    const optimistic = {
-      id: tempId,
-      circle_id: activeCircle.id,
-      user_id: user.id,
-      content: text || null,
-      media_url: circleMediaUrl || null,
-      media_type: circleMediaType || null,
-      created_at: new Date().toISOString(),
-      profiles: null, // will be filled by realtime
-    }
-    setMsgs(prev => [...prev, optimistic])
     setCircleMediaUrl('')
     setCircleMediaType(undefined)
+    setSending(true)
 
     const res = await fetch('/api/circles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         circleId: activeCircle.id,
-        content: text || '📎',
-        media_url: circleMediaUrl || null,
-        media_type: circleMediaType || null,
+        content: text || null,
+        media_url: mediaUrl || null,
+        media_type: mediaType || null,
       }),
     })
 
     if (res.ok) {
       const data = await res.json()
-      // Replace optimistic with real message
-      if (data.message) {
-        setMsgs(prev => prev.map(m => m.id === tempId ? { ...data.message, profiles: { id: user.id, full_name: 'You' } } : m))
+      // Add the real message (with correct id + media fields) from the server response
+      const savedMsg = data.message || data.userMessage
+      if (savedMsg) {
+        setMsgs(prev => prev.find(m => m.id === savedMsg.id) ? prev : [...prev, savedMsg])
+      }
+      // Add AI reply if present
+      if (data.aiMessage) {
+        setMsgs(prev => prev.find(m => m.id === data.aiMessage.id) ? prev : [...prev, data.aiMessage])
       }
     } else {
-      // Remove optimistic on error
-      setMsgs(prev => prev.filter(m => m.id !== tempId))
       toast.error('Failed to send message')
     }
 
