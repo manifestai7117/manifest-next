@@ -4,39 +4,44 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// Sequential image generation with retry — avoids parallel rate limit failures
-async function generateImage(prompt: string, retries = 2): Promise<string | null> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'dall-e-3',
-          prompt,
-          n: 1,
-          size: '1024x1792',
-          quality: 'hd',
-          style: 'vivid',
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        console.error(`DALL-E attempt ${attempt + 1} failed:`, err)
-        if (attempt < retries) await new Promise(r => setTimeout(r, 2000 * (attempt + 1)))
-        continue
-      }
-      const data = await res.json()
-      return data.data?.[0]?.url ?? null
-    } catch (e) {
-      console.error(`generateImage attempt ${attempt + 1} error:`, e)
-      if (attempt < retries) await new Promise(r => setTimeout(r, 2000 * (attempt + 1)))
+// Set max duration for Vercel — add this to route segment config
+export const maxDuration = 300 // 5 minutes (requires Pro plan)
+// If on hobby plan, this won't work — we handle timeout gracefully below
+
+async function generateImage(prompt: string): Promise<string | null> {
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 55000) // 55s per image
+    
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: prompt.slice(0, 4000), // DALL-E prompt limit
+        n: 1,
+        size: '1024x1792',
+        quality: 'standard', // 'standard' is faster than 'hd', still looks great
+        style: 'vivid',
+      }),
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      console.error('DALL-E error:', JSON.stringify(err))
+      return null
     }
+    const data = await res.json()
+    return data.data?.[0]?.url ?? null
+  } catch (e: any) {
+    console.error('generateImage error:', e.message)
+    return null
   }
-  return null
 }
 
 export async function POST(request: Request) {
@@ -48,14 +53,10 @@ export async function POST(request: Request) {
     const { goalId } = await request.json()
 
     const { data: goal } = await supabase
-      .from('goals')
-      .select('*')
-      .eq('id', goalId)
-      .eq('user_id', user.id)
-      .single()
+      .from('goals').select('*').eq('id', goalId).eq('user_id', user.id).single()
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
 
-    // Build specific person description
+    // Build person description
     const personParts = [
       goal.user_gender && goal.user_gender !== 'Prefer not to say' ? goal.user_gender.toLowerCase() : null,
       goal.user_age ? `${goal.user_age}-year-old` : null,
@@ -63,45 +64,34 @@ export async function POST(request: Request) {
     ].filter(Boolean)
     const personDesc = personParts.length > 0 ? personParts.join(' ') : 'person'
     const cityDesc = goal.user_city ? `in ${goal.user_city}` : ''
-    const hasSelfiePermission = !!(goal.selfie_url && goal.selfie_permission)
 
-    // Step 1: Claude generates 3 richly differentiated concepts
+    // Step 1: Generate 3 concepts with Claude (fast, <5s)
     const conceptRes = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1200,
+      model: 'claude-haiku-4-5-20251001', // use Haiku for speed
+      max_tokens: 900,
       messages: [{
         role: 'user',
-        content: `You are a world-class vision board art director. Create 3 deeply personal, cinematic image concepts for someone's goal.
+        content: `Create 3 distinct vision board image concepts for this goal.
 
 GOAL: "${goal.title}"
-WHY IT MATTERS: ${goal.why}
-AESTHETIC: ${goal.aesthetic}
-CATEGORY: ${goal.category}
+WHY: ${goal.why}
+AESTHETIC: ${goal.aesthetic || 'Bold & dark'}
 PERSON: ${personDesc} ${cityDesc}
-AFFIRMATION: "${goal.affirmation}"
-CURRENT STORY: ${goal.current_story || 'Not shared'}
-PHASE PROGRESS: ${goal.phase1_completed ? 'Phase 1 complete' : ''} ${goal.phase2_completed ? 'Phase 2 complete' : ''} ${goal.streak > 0 ? `${goal.streak}-day streak` : ''}
+STREAK: ${goal.streak} days
 
-RULES FOR GREAT VISION ART:
-- Each concept must feel COMPLETELY different in setting, time of day, mood, and composition
-- Make it feel like the moment AFTER achieving the goal — not the struggle, but the arrival
-- Be hyper-specific: don't say "fit person", say "standing in the kitchen at 6am, shirt off, catching your reflection in the microwave door, realising you've changed"
-- Ground it in real life: a specific gym, mirror, street, beach, moment — not a fantasy mountaintop
-- The ${personDesc} should be the subject but shown from behind, side, or mid-distance — NOT a close-up portrait (avoids uncanny valley)
-- Mood over muscle: emotion, light, atmosphere matter more than physique details
-- ${goal.aesthetic === 'Bold & dark' ? 'Use dramatic chiaroscuro lighting, deep shadows, high contrast' : ''}
-- ${goal.aesthetic === 'Minimal & clean' ? 'Use clean natural light, negative space, restrained palette' : ''}
-- ${goal.aesthetic === 'Warm & natural' ? 'Use golden hour warmth, organic textures, earth tones' : ''}
-- ${goal.aesthetic === 'Bright & energetic' ? 'Use vibrant colour, dynamic angles, kinetic energy' : ''}
+Rules:
+- Each concept must be completely different in setting, mood, composition
+- Show the moment AFTER achieving the goal — the arrival, not the struggle  
+- Ground it in real life (specific gym, mirror, street, beach) not fantasy
+- Subject shown from behind or mid-distance, never close-up portrait
+- Be specific and cinematic, not generic stock photo
+- ${goal.aesthetic === 'Bold & dark' ? 'Dramatic chiaroscuro, deep shadows, high contrast' : ''}
+- ${goal.aesthetic === 'Warm & natural' ? 'Golden hour, earth tones, organic warmth' : ''}
+- ${goal.aesthetic === 'Minimal & clean' ? 'Clean natural light, negative space, calm' : ''}
+- ${goal.aesthetic === 'Bright & energetic' ? 'Vibrant colour, dynamic angles, kinetic energy' : ''}
 
-Return ONLY a JSON array of exactly 3 objects:
-[
-  {
-    "label": "evocative 3-5 word title",
-    "description": "one powerful sentence — the emotional story of this image",
-    "dallePrompt": "a 120-150 word DALL-E 3 prompt. Start with the shot type and lighting. Describe the specific scene, environment, time of day, the ${personDesc}'s pose and position. End with: cinematic photography, ${goal.aesthetic} aesthetic, photorealistic, 8K, no text."
-  }
-]`,
+Return ONLY valid JSON array of 3 objects:
+[{"label":"3-5 word title","description":"one sentence emotional story","dallePrompt":"80-100 word DALL-E prompt starting with shot type and lighting, describing the scene vividly, ending with: photorealistic, cinematic, 8K, no text"}]`,
       }],
     })
 
@@ -109,34 +99,38 @@ Return ONLY a JSON array of exactly 3 objects:
     try {
       const raw = conceptRes.content[0].type === 'text' ? conceptRes.content[0].text : '[]'
       const cleaned = raw.replace(/```json|```/g, '').trim()
+      // Handle potential trailing commas or other JSON issues
       concepts = JSON.parse(cleaned)
-    } catch {
-      return NextResponse.json({ error: 'Failed to generate scene concepts' }, { status: 500 })
+      if (!Array.isArray(concepts)) concepts = []
+    } catch (e) {
+      console.error('Concept parse error:', e)
+      return NextResponse.json({ error: 'Failed to generate concepts' }, { status: 500 })
     }
 
-    // Step 2: Generate images SEQUENTIALLY (not parallel) to avoid rate limits
-    const options: any[] = []
-    for (const concept of concepts) {
-      // Add person note to each prompt
-      const personNote = hasSelfiePermission && personDesc !== 'person'
-        ? `The subject is a ${personDesc}.`
-        : personDesc !== 'person'
-          ? `The subject appears to be a ${personDesc}.`
-          : ''
+    // Step 2: Generate all 3 images in PARALLEL with individual timeouts
+    // This is faster overall even if one fails
+    const personNote = personDesc !== 'person' ? `Subject is a ${personDesc}.` : ''
 
-      const finalPrompt = [concept.dallePrompt, personNote].filter(Boolean).join(' ')
-
-      const imageUrl = await generateImage(finalPrompt)
-      options.push({
-        label: concept.label,
-        description: concept.description,
+    const imagePromises = concepts.map(async (concept: any, i: number) => {
+      // Small stagger to avoid hitting rate limits simultaneously
+      await new Promise(r => setTimeout(r, i * 500))
+      const prompt = [concept.dallePrompt, personNote].filter(Boolean).join(' ')
+      const imageUrl = await generateImage(prompt)
+      return {
+        label: concept.label || `Vision ${i + 1}`,
+        description: concept.description || '',
         imageUrl,
-      })
-
-      // Small delay between requests to be kind to the rate limit
-      if (options.length < concepts.length) {
-        await new Promise(r => setTimeout(r, 800))
       }
+    })
+
+    const options = await Promise.all(imagePromises)
+
+    // If ALL images failed, return error
+    if (options.every(o => !o.imageUrl)) {
+      return NextResponse.json({ 
+        error: 'Image generation timed out. Please try again — DALL-E can be slow.',
+        options: [] 
+      }, { status: 500 })
     }
 
     return NextResponse.json({ options })

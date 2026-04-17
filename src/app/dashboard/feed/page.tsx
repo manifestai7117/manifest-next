@@ -27,13 +27,13 @@ type Post = {
 }
 
 const TYPE_CFG: Record<string, { emoji: string; color: string; bg: string }> = {
-  achievement: { emoji: '🏆', color: 'text-yellow-700', bg: 'bg-yellow-50' },
-  checkin:     { emoji: '✅', color: 'text-green-700',  bg: 'bg-green-50'  },
-  goal_start:  { emoji: '🎯', color: 'text-blue-700',   bg: 'bg-blue-50'   },
-  feeling:     { emoji: '💭', color: 'text-purple-700', bg: 'bg-purple-50' },
-  reward:      { emoji: '⭐', color: 'text-[#b8922a]',  bg: 'bg-[#faf3e0]' },
-  milestone:   { emoji: '🚀', color: 'text-indigo-700', bg: 'bg-indigo-50' },
-  general:     { emoji: '📝', color: 'text-[#666]',     bg: 'bg-[#f8f7f5]' },
+  achievement: { emoji: 'ðŸ†', color: 'text-yellow-700', bg: 'bg-yellow-50' },
+  checkin:     { emoji: 'âœ…', color: 'text-green-700',  bg: 'bg-green-50'  },
+  goal_start:  { emoji: 'ðŸŽ¯', color: 'text-blue-700',   bg: 'bg-blue-50'   },
+  feeling:     { emoji: 'ðŸ’­', color: 'text-purple-700', bg: 'bg-purple-50' },
+  reward:      { emoji: 'â­', color: 'text-[#b8922a]',  bg: 'bg-[#faf3e0]' },
+  milestone:   { emoji: 'ðŸš€', color: 'text-indigo-700', bg: 'bg-indigo-50' },
+  general:     { emoji: 'ðŸ“', color: 'text-[#666]',     bg: 'bg-[#f8f7f5]' },
 }
 const POST_TYPES = [
   { v: 'general', l: 'General' }, { v: 'achievement', l: 'Achievement' },
@@ -111,9 +111,9 @@ function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDele
     setCommenting(false)
   }
 
-  const visibilityBadge = post.visibility === 'public' ? { label: '🌍 Public', cls: 'bg-blue-50 text-blue-700' } :
-    post.visibility === 'private' ? { label: '🔒 Only me', cls: 'bg-[#f2f0ec] text-[#666]' } :
-    { label: '👥 Friends', cls: 'bg-green-50 text-green-700' }
+  const visibilityBadge = post.visibility === 'public' ? { label: 'ðŸŒ Public', cls: 'bg-blue-50 text-blue-700' } :
+    post.visibility === 'private' ? { label: 'ðŸ”’ Only me', cls: 'bg-[#f2f0ec] text-[#666]' } :
+    { label: 'ðŸ‘¥ Friends', cls: 'bg-green-50 text-green-700' }
 
   return (
     <>
@@ -126,9 +126,9 @@ function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDele
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-[14px] font-semibold">{post.profiles?.full_name}</p>
                 <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${tc.bg} ${tc.color}`}>{tc.emoji} {POST_TYPES.find(t => t.v === post.post_type)?.l}</span>
-                {post.goal_title && <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full max-w-[120px] truncate">🎯 {post.goal_title}</span>}
+                {post.goal_title && <span className="text-[10px] text-[#b8922a] bg-[#faf3e0] px-2 py-0.5 rounded-full max-w-[120px] truncate">ðŸŽ¯ {post.goal_title}</span>}
                 <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${visibilityBadge.cls}`}>{visibilityBadge.label}</span>
-                {post.is_archived && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f2f0ec] text-[#999]">📦 Archived</span>}
+                {post.is_archived && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f2f0ec] text-[#999]">ðŸ“¦ Archived</span>}
               </div>
               <p className="text-[11px] text-[#999] mt-0.5">{timeAgo(post.created_at)}</p>
             </div>
@@ -141,14 +141,14 @@ function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDele
                   {isOwn ? (
                     <>
                       <button onClick={() => onArchive(post.id, !post.is_archived)} className="w-full text-left px-4 py-2.5 text-[13px] text-[#666] hover:bg-[#f8f7f5]">
-                        {post.is_archived ? '📤 Unarchive' : '📦 Archive'}
+                        {post.is_archived ? 'ðŸ“¤ Unarchive' : 'ðŸ“¦ Archive'}
                       </button>
-                      <button onClick={() => onDelete(post.id)} className="w-full text-left px-4 py-2.5 text-[13px] text-red-500 hover:bg-red-50">🗑 Delete</button>
+                      <button onClick={() => onDelete(post.id)} className="w-full text-left px-4 py-2.5 text-[13px] text-red-500 hover:bg-red-50">ðŸ—‘ Delete</button>
                     </>
                   ) : (
                     <>
-                      <button onClick={() => setReport({ id: post.id, type: 'post' })} className="w-full text-left px-4 py-2.5 text-[13px] text-[#666] hover:bg-[#f8f7f5]">🚩 Report</button>
-                      <button onClick={() => onBlock(post.user_id)} className="w-full text-left px-4 py-2.5 text-[13px] text-red-500 hover:bg-red-50">🚫 Block user</button>
+                      <button onClick={() => setReport({ id: post.id, type: 'post' })} className="w-full text-left px-4 py-2.5 text-[13px] text-[#666] hover:bg-[#f8f7f5]">ðŸš© Report</button>
+                      <button onClick={() => onBlock(post.user_id)} className="w-full text-left px-4 py-2.5 text-[13px] text-red-500 hover:bg-red-50">ðŸš« Block user</button>
                     </>
                   )}
                 </div>
@@ -159,8 +159,8 @@ function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDele
           {post.media_url && (
             <div className="mt-3 rounded-xl overflow-hidden border border-[#f0ede8]">
               {post.media_type === 'video'
-                ? <video src={post.media_url} controls className="w-full max-h-64 object-cover"/>
-                : <img src={post.media_url} alt="" className="w-full max-h-64 object-cover cursor-pointer" onClick={() => window.open(post.media_url, '_blank')}/>
+                ? <video src={post.media_url} controls className="w-full max-h-[480px] object-contain bg-black rounded-xl"/>
+                : <img src={post.media_url} alt="" className="w-full max-h-[480px] object-contain bg-black/5 cursor-pointer rounded-xl" onClick={() => window.open(post.media_url, '_blank')}/>
               }
             </div>
           )}
@@ -192,8 +192,8 @@ function PostCard({ post, userId, onLike, onDelete, onArchive, onComment, onDele
                         <div className="flex items-center gap-2">
                           <p className="text-[10px] text-[#999]">{timeAgo(c.created_at)}</p>
                           {c.user_id === userId
-                            ? <button onClick={() => onDeleteComment(c.id, post.id)} className="text-[#ccc] hover:text-red-400 text-[14px]">×</button>
-                            : <button onClick={() => setReport({ id: c.id, type: 'comment' })} className="text-[10px] text-[#ccc] hover:text-red-400">🚩</button>
+                            ? <button onClick={() => onDeleteComment(c.id, post.id)} className="text-[#ccc] hover:text-red-400 text-[14px]">Ã—</button>
+                            : <button onClick={() => setReport({ id: c.id, type: 'comment' })} className="text-[10px] text-[#ccc] hover:text-red-400">ðŸš©</button>
                           }
                         </div>
                       </div>
@@ -421,7 +421,7 @@ export default function FeedPage() {
       if (post) setPosts(prev => [{ ...post, is_archived: false }, ...prev])
       setArchivedPosts(prev => prev.filter(p => p.id !== postId))
       setShowArchived(false) // auto-switch to feed so user sees restored post
-      toast.success('Post restored to your feed ✓')
+      toast.success('Post restored to your feed âœ“')
       return
     }
     toast.success(archive ? 'Archived' : 'Unarchived')
@@ -465,7 +465,7 @@ export default function FeedPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="font-serif text-[32px] mb-0.5">Feed</h1>
-          <p className="text-[13px] text-[#999]">{posts.length} posts · ranked by relevance</p>
+          <p className="text-[13px] text-[#999]">{posts.length} posts Â· ranked by relevance</p>
         </div>
         <div className="flex gap-2">
           <button onClick={refresh} disabled={refreshing} className="flex items-center gap-1.5 px-3.5 py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#666] hover:bg-[#f8f7f5] transition-colors disabled:opacity-50">
@@ -480,7 +480,7 @@ export default function FeedPage() {
 
       {/* Filter tabs */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {([['all', '✦ For you'], ['friends', '👥 Friends'], ['public', '🌍 Public']] as const).map(([val, label]) => (
+        {([['all', 'âœ¦ For you'], ['friends', 'ðŸ‘¥ Friends'], ['public', 'ðŸŒ Public']] as const).map(([val, label]) => (
           <button key={val} onClick={() => setFeedFilter(val)}
             className={`px-3.5 py-1.5 rounded-full text-[12px] font-medium border transition-all ${feedFilter === val ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
             {label}
@@ -488,13 +488,13 @@ export default function FeedPage() {
         ))}
         <button onClick={() => { setShowArchived(prev => { if (!prev) loadArchivedPosts(); return !prev }) }}
           className={`px-3.5 py-1.5 rounded-full text-[12px] font-medium border transition-all ${showArchived ? 'bg-[#b8922a] text-white border-[#b8922a]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
-          📦 Archived
+          ðŸ“¦ Archived
         </button>
       </div>
 
       {pullDist > 10 && (
         <div className="flex justify-center mb-3" style={{ height: `${pullDist}px` }}>
-          <p className="text-[12px] text-[#999] self-end">{pullDist > 60 ? '↑ Release' : '↓ Pull to refresh'}</p>
+          <p className="text-[12px] text-[#999] self-end">{pullDist > 60 ? 'â†‘ Release' : 'â†“ Pull to refresh'}</p>
         </div>
       )}
 
@@ -517,14 +517,14 @@ export default function FeedPage() {
                 {(['friends', 'public', 'private'] as const).map(v => (
                   <button key={v} onClick={() => setVisibility(v)}
                     className={`px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all ${visibility === v ? 'bg-[#b8922a] text-white border-[#b8922a]' : 'bg-white text-[#666] border-[#e8e8e8]'}`}>
-                    {v === 'public' ? '🌍 Public' : v === 'private' ? '🔒 Only me' : '👥 Friends'}
+                    {v === 'public' ? 'ðŸŒ Public' : v === 'private' ? 'ðŸ”’ Only me' : 'ðŸ‘¥ Friends'}
                   </button>
                 ))}
               </div>
               {goals.length > 0 && (
                 <select value={selectedGoalId} onChange={e => setSelectedGoalId(e.target.value)}
                   className="w-full text-[12px] border border-[#e8e8e8] rounded-xl px-3 py-2 outline-none focus:border-[#111] mb-2 text-[#666]">
-                  <option value="">🎯 Tag a goal (optional)</option>
+                  <option value="">ðŸŽ¯ Tag a goal (optional)</option>
                   {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
                 </select>
               )}
@@ -538,7 +538,7 @@ export default function FeedPage() {
                 mediaUrl={mediaUrl} mediaType={mediaType} context="post"
               />
               <div className="flex items-center justify-between mt-2">
-                <span className="text-[11px] text-[#999]">{content.length}/500 · AI moderated</span>
+                <span className="text-[11px] text-[#999]">{content.length}/500 Â· AI moderated</span>
                 <div className="flex gap-2">
                   <button onClick={() => setShowCompose(false)} className="px-3 py-1.5 text-[12px] text-[#999]">Cancel</button>
                   <button onClick={submitPost} disabled={!content.trim() || posting}
@@ -565,7 +565,7 @@ export default function FeedPage() {
           </div>
         ) : filteredPosts.length === 0 ? (
           <div className="text-center py-14">
-            <div className="text-[48px] mb-3">🌱</div>
+            <div className="text-[48px] mb-3">ðŸŒ±</div>
             <p className="text-[15px] font-medium mb-2">Nothing here yet</p>
             <p className="text-[13px] text-[#666] mb-5">Add friends or make your first post</p>
             <button onClick={() => setShowCompose(true)} className="px-5 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium">Make a post</button>

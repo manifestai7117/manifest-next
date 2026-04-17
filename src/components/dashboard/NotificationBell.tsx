@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Notif = {
@@ -18,8 +18,9 @@ const ICONS: Record<string, string> = {
 }
 
 function timeAgo(d: string) {
+  if (!d) return 'just now'
   const ms = Date.now() - new Date(d).getTime()
-  if (isNaN(ms)) return 'just now'
+  if (isNaN(ms) || ms < 0) return 'just now'
   const s = ms / 1000
   if (s < 60) return 'just now'
   if (s < 3600) return `${Math.floor(s / 60)}m ago`
@@ -34,57 +35,59 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const channelRef = useRef<any>(null)
 
-  const loadNotifs = async () => {
+  const loadNotifs = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications')
+      const res = await fetch('/api/notifications', { cache: 'no-store' })
       if (!res.ok) return
       const data = await res.json()
       setNotifs(data.notifications || [])
       setUnread((data.notifications || []).filter((n: Notif) => !n.read).length)
     } catch {}
-  }
+  }, [])
 
-  // Initial load + get userId for realtime subscription
+  // Init: get user, load notifs, then set up realtime
   useEffect(() => {
     let mounted = true
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!mounted || !user) return
       setUserId(user.id)
-      loadNotifs()
-    }
-    init()
-    return () => { mounted = false }
-  }, [])
+      await loadNotifs()
 
-  // Supabase Realtime subscription for new notifications
-  useEffect(() => {
-    if (!userId) return
+      // Poll every 15s as fallback (realtime may be slow to connect)
+      const interval = setInterval(loadNotifs, 15000)
 
-    const channel = supabase
-      .channel(`notifications-${userId}`)
-      .on(
-        'postgres_changes',
-        {
+      // Realtime subscription
+      const channel = supabase
+        .channel(`notif-bell-${user.id}`)
+        .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const newNotif = payload.new as Notif
-          setNotifs(prev => {
-            if (prev.find(n => n.id === newNotif.id)) return prev
-            return [newNotif, ...prev]
-          })
+          filter: `user_id=eq.${user.id}`,
+        }, (payload) => {
+          const n = payload.new as Notif
+          setNotifs(prev => prev.find(x => x.id === n.id) ? prev : [n, ...prev])
           setUnread(prev => prev + 1)
-        }
-      )
-      .subscribe()
+        })
+        .subscribe((status) => {
+          console.log('NotificationBell realtime status:', status)
+        })
 
-    return () => { supabase.removeChannel(channel) }
-  }, [userId])
+      channelRef.current = { channel, interval }
+    }
+
+    init()
+    return () => {
+      mounted = false
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current.channel)
+        clearInterval(channelRef.current.interval)
+      }
+    }
+  }, [])
 
   // Close on outside click
   useEffect(() => {
@@ -94,6 +97,13 @@ export default function NotificationBell() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  // Reload when opened
+  const handleOpen = () => {
+    const next = !open
+    setOpen(next)
+    if (next) loadNotifs()
+  }
 
   const markAll = async () => {
     try {
@@ -124,8 +134,8 @@ export default function NotificationBell() {
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen(!open)}
-        className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[#f0ede8] transition-colors"
+        onClick={handleOpen}
+        className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[#f0ede8] dark:hover:bg-white/10 transition-colors"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -139,8 +149,8 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 w-[320px] bg-white border border-[#e8e8e8] rounded-2xl shadow-2xl z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#f0ede8] flex items-center justify-between">
+        <div className="absolute right-0 top-11 w-[320px] bg-white dark:bg-[#1a1a1a] border border-[#e8e8e8] dark:border-[#333] rounded-2xl shadow-2xl z-50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#f0ede8] dark:border-[#333] flex items-center justify-between">
             <p className="font-medium text-[14px]">Notifications</p>
             {unread > 0 && (
               <button onClick={markAll} className="text-[11px] text-[#b8922a] hover:underline">
@@ -158,11 +168,11 @@ export default function NotificationBell() {
               <div
                 key={n.id}
                 onClick={() => markOne(n.id, n.link)}
-                className={`px-4 py-3 flex gap-3 cursor-pointer hover:bg-[#f8f7f5] transition-colors border-b border-[#f8f7f5] last:border-0 ${!n.read ? 'bg-[#faf3e0]/40' : ''}`}
+                className={`px-4 py-3 flex gap-3 cursor-pointer hover:bg-[#f8f7f5] dark:hover:bg-white/5 transition-colors border-b border-[#f8f7f5] dark:border-[#222] last:border-0 ${!n.read ? 'bg-[#faf3e0]/40 dark:bg-[#b8922a]/10' : ''}`}
               >
                 <span className="text-[20px] flex-shrink-0 mt-0.5">{ICONS[n.type] || '🔔'}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-[#111] leading-[1.4]">{n.title}</p>
+                  <p className="text-[13px] font-medium leading-[1.4]">{n.title}</p>
                   {n.body && <p className="text-[12px] text-[#666] mt-0.5 leading-[1.4] truncate">{n.body}</p>}
                   <p className="text-[11px] text-[#bbb] mt-1">{timeAgo(n.created_at)}</p>
                 </div>

@@ -7,7 +7,6 @@ const serviceSupabase = createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - fetch notifications for current user
 export async function GET() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -21,29 +20,29 @@ export async function GET() {
       .order('created_at', { ascending: false })
       .limit(20)
 
-    const actorIds = Array.from(new Set((data || []).map((n: any) => n.actor_id).filter(Boolean)))
+    const actorIds = Array.from(
+      new Set((data || []).map((n: any) => n.actor_id).filter(Boolean))
+    ) as string[]
+
     let actorMap: Record<string, any> = {}
     if (actorIds.length > 0) {
       const { data: actors } = await serviceSupabase
-        .from('profiles')
-        .select('id, full_name, avatar_url')
-        .in('id', actorIds)
+        .from('profiles').select('id, full_name, avatar_url').in('id', actorIds)
       actorMap = Object.fromEntries((actors || []).map((a: any) => [a.id, a]))
     }
 
     const notifications = (data || []).map((n: any) => ({
       ...n,
-      actor: n.actor_id ? actorMap[n.actor_id] || null : null,
+      actor: n.actor_id ? (actorMap[n.actor_id] || null) : null,
     }))
     const unread = notifications.filter((n: any) => !n.read).length
-
     return NextResponse.json({ notifications, unread })
   } catch (e: any) {
+    console.error('Notifications GET error:', e)
     return NextResponse.json({ notifications: [], unread: 0 })
   }
 }
 
-// POST - create a notification (cross-user, needs service role)
 export async function POST(request: Request) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -52,10 +51,12 @@ export async function POST(request: Request) {
   try {
     const { user_id, type, title, body, link } = await request.json()
     if (!user_id || !type || !title) {
-      return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-    // Use service role to bypass RLS — actor is verified as authenticated above
-    await serviceSupabase.from('notifications').insert({
+    // Don't notify yourself
+    if (user_id === user.id) return NextResponse.json({ success: true })
+
+    const { error } = await serviceSupabase.from('notifications').insert({
       user_id,
       actor_id: user.id,
       type,
@@ -63,18 +64,24 @@ export async function POST(request: Request) {
       body: body || null,
       link: link || null,
       read: false,
+      created_at: new Date().toISOString(),
     })
+    if (error) {
+      console.error('Notification insert error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
     return NextResponse.json({ success: true })
   } catch (e: any) {
+    console.error('Notifications POST error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
 
-// PATCH - mark notifications as read
 export async function PATCH(request: Request) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { id } = await request.json()
   if (id === 'all') {
     await serviceSupabase.from('notifications').update({ read: true }).eq('user_id', user.id)
