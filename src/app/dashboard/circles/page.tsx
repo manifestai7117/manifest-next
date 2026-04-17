@@ -169,9 +169,11 @@ export default function CirclesPage() {
 
   const sendMsg = async () => {
     if ((!inp.trim() && !circleMediaUrl) || sending || !activeCircle || !user) return
+    // Capture values before clearing state
     const text = inp.trim()
     const mediaUrl = circleMediaUrl
     const mediaType = circleMediaType
+    // Clear inputs immediately for UX
     setInp('')
     setCircleMediaUrl('')
     setCircleMediaType(undefined)
@@ -183,8 +185,8 @@ export default function CirclesPage() {
       body: JSON.stringify({
         circleId: activeCircle.id,
         content: text || null,
-        media_url: mediaUrl || null,
-        media_type: mediaType || null,
+        media_url: mediaUrl || null,    // captured before state clear
+        media_type: mediaType || null,  // captured before state clear
       }),
     })
 

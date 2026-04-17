@@ -50,8 +50,8 @@ export async function POST(request: Request) {
     if (!circleId) return NextResponse.json({ error: 'Missing circleId' }, { status: 400 })
 
     // Must have content OR media
-    const hasContent = content?.trim()
-    const hasMedia = !!media_url
+    const hasContent = !!(content && content.trim())
+    const hasMedia = !!(media_url && media_url.startsWith('http'))
     if (!hasContent && !hasMedia) {
       return NextResponse.json({ error: 'Message must have content or media' }, { status: 400 })
     }
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
 
     // AI responds occasionally (not for media-only messages)
     let aiMsg = null
-    if (hasContent) {
+    if (hasContent && content.trim()) {
       const { data: recentMsgs } = await supabase
         .from('circle_messages')
         .select('sender_name, content, is_ai')
