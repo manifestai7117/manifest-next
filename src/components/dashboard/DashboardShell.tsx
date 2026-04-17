@@ -17,7 +17,7 @@ const NAV = [
   { href: '/dashboard/streak',  label: 'Streak',     emoji: '⚡' },
   { href: '/dashboard/settings',label: 'Settings',   emoji: '⚙' },
   { href: '/dashboard/profile', label: 'Profile',    emoji: '◯' },
-]]
+]
 
 const BOTTOM_NAV = [
   { href: '/dashboard',        label: 'Home',   emoji: '⌂' },
@@ -25,7 +25,7 @@ const BOTTOM_NAV = [
   { href: '/dashboard/coach',  label: 'Coach',  emoji: '✦' },
   { href: '/dashboard/feed',   label: 'Feed',   emoji: '◈' },
   { href: '/dashboard/streak', label: 'Streak', emoji: '⚡' },
-]]
+]
 
 
 function ScrollRestorer({ pathname, children }: { pathname: string; children: React.ReactNode }) {
