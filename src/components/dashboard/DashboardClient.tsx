@@ -102,6 +102,7 @@ export default function DashboardClient({
   const supabase = createClient()
   const router = useRouter()
   const [selectedGoalId, setSelectedGoalId] = useState(goals[0]?.id || '')
+  const [todayTask, setTodayTask] = useState<{ task: string; completed: boolean | null } | null>(null)
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
   const [ratingDismissed, setRatingDismissed] = useState(existingRating)
@@ -112,6 +113,19 @@ export default function DashboardClient({
     const saved = localStorage.getItem('selectedGoalId')
     if (saved && goals.find((g: any) => g.id === saved)) setSelectedGoalId(saved)
   }, [])
+
+  // Fetch today's task for the selected goal
+  useEffect(() => {
+    const goalId = selectedGoalId || goals[0]?.id
+    if (!goalId) return
+    const today = new Date().toISOString().split('T')[0]
+    supabase.from('daily_tasks')
+      .select('task, completed')
+      .eq('goal_id', goalId)
+      .eq('task_date', today)
+      .maybeSingle()
+      .then(({ data }) => setTodayTask(data || null))
+  }, [selectedGoalId])
 
   const goal = goals.find(g => g.id === selectedGoalId) || goals[0]
   if (!goal) return null
