@@ -352,15 +352,8 @@ export default function ProfileFeedbackPage() {
                 onClick={async () => {
                   setDeletingAccount(true)
                   try {
-                    await Promise.all([
-                      supabase.from('goals').delete().eq('user_id', user.id),
-                      supabase.from('checkins').delete().eq('user_id', user.id),
-                      supabase.from('coach_messages').delete().eq('user_id', user.id),
-                      supabase.from('feed_posts').delete().eq('user_id', user.id),
-                      supabase.from('daily_tasks').delete().eq('user_id', user.id),
-                      supabase.from('friendships').delete().or(`requester.eq.${user.id},addressee.eq.${user.id}`),
-                    ])
-                    await supabase.from('profiles').delete().eq('id', user.id)
+                    const res = await fetch('/api/delete-account', { method: 'POST' })
+                    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed') }
                     await supabase.auth.signOut()
                     router.push('/')
                   } catch {

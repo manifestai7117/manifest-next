@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
@@ -20,64 +20,37 @@ export default function OnboardingPage() {
   const supabase = createClient()
   const [step, setStep] = useState(0)
   const [user, setUser] = useState<any>(null)
-  const [isFirstGoal, setIsFirstGoal] = useState(true)
   const [data, setData] = useState({
     goal:'', category:'', timeline:'', why:'', obstacles:'', aesthetic:'',
     gender:'', age:'', ethnicity:'', city:'',
   })
-  const [selfie, setSelfie] = useState<string | null>(null) // base64 or uploaded URL
-  const [selfieUrl, setSelfieUrl] = useState<string | null>(null) // final stored URL
-  const [selfiePermission, setSelfiePermission] = useState<boolean | null>(null) // null = not asked yet
-  const [uploadingSelfie, setUploadingSelfie] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [generating, setGenerating] = useState(false)
-  const selfieRef = useRef<HTMLInputElement>(null)
   const upd = (k: string, v: string) => setData(d => ({ ...d, [k]: v }))
+
+  const [profileHasInfo, setProfileHasInfo] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: authData }) => {
       if (!authData.user) { router.push('/auth/login'); return }
       setUser(authData.user)
-      // Check if this is the first goal
-      const { count } = await supabase
-        .from('goals')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', authData.user.id)
-        .eq('is_active', true)
-      setIsFirstGoal((count || 0) === 0)
-
-      // Load existing selfie from profile if available
-      const { data: profile } = await supabase.from('profiles').select('selfie_url, user_gender, user_age, user_ethnicity, user_city').eq('id', authData.user.id).single()
-      if (profile?.selfie_url) {
-        setSelfieUrl(profile.selfie_url)
-        setSelfiePermission(true)
+      // If user already has personal info saved, pre-fill and skip step 4
+      const { data: prof } = await supabase
+        .from('profiles').select('user_gender, user_city, user_age, user_ethnicity').eq('id', authData.user.id).single()
+      if (prof && (prof.user_gender || prof.user_city)) {
+        setProfileHasInfo(true)
+        setData(d => ({
+          ...d,
+          gender: prof.user_gender || '',
+          city: prof.user_city || '',
+          age: prof.user_age ? String(prof.user_age) : '',
+          ethnicity: prof.user_ethnicity || '',
+        }))
       }
-      if (profile?.user_gender) upd('gender', profile.user_gender)
-      if (profile?.user_age) upd('age', profile.user_age)
-      if (profile?.user_ethnicity) upd('ethnicity', profile.user_ethnicity)
-      if (profile?.user_city) upd('city', profile.user_city)
     })
   }, [])
 
-  // Steps:
-  // 0 = Goal + category
-  // 1 = Timeline
-  // 2 = Why + obstacles
-  // 3 = Aesthetic
-  // 4 = Selfie / AI art personalisation (ONLY if first goal OR no selfie yet)
-  // 5 = Demographics (ONLY if first goal)
-  // 6 = Generating
-
-  const needsSelfieStep = isFirstGoal || !selfieUrl
-  const needsDemoStep = isFirstGoal
-
-  // Build dynamic step list
-  const steps: number[] = [0, 1, 2, 3]
-  if (needsSelfieStep) steps.push(4)
-  if (needsDemoStep) steps.push(5)
-  const TOTAL_STEPS = steps.length
-
-  const currentStepIndex = steps.indexOf(step === 6 ? -1 : step)
+  const TOTAL_STEPS = 5
 
   const validate = () => {
     if (step === 0 && (!data.goal.trim() || !data.category)) return 'Please describe your goal and pick a category'
@@ -90,50 +63,10 @@ export default function OnboardingPage() {
   const next = async () => {
     const err = validate()
     if (err) { toast.error(err); return }
-
-    const currentIdx = steps.indexOf(step)
-    if (currentIdx === steps.length - 1) {
-      // Last step — generate
-      setStep(6)
-      generate()
-    } else {
-      setStep(steps[currentIdx + 1])
-    }
-  }
-
-  const back = () => {
-    const currentIdx = steps.indexOf(step)
-    if (currentIdx > 0) setStep(steps[currentIdx - 1])
-  }
-
-  const handleSelfie = async (file: File) => {
-    if (uploadingSelfie) return
-    setUploadingSelfie(true)
-    try {
-      // Show preview immediately
-      const reader = new FileReader()
-      reader.onload = e => setSelfie(e.target?.result as string)
-      reader.readAsDataURL(file)
-
-      // Upload via media API
-      const form = new FormData()
-      form.append('file', file)
-      form.append('context', 'selfie')
-      const res = await fetch('/api/media', { method: 'POST', body: form })
-      const d = await res.json()
-      if (!res.ok) {
-        toast.error(d.error || 'Upload failed')
-        setSelfie(null)
-        setUploadingSelfie(false)
-        return
-      }
-      setSelfieUrl(d.url)
-      toast.success('Photo uploaded!')
-    } catch {
-      toast.error('Upload failed')
-      setSelfie(null)
-    }
-    setUploadingSelfie(false)
+    // Skip 'About you' step if profile already has personal info saved
+    if (step === 3 && profileHasInfo) { setStep(5); generate(); return }
+    if (step === 4) { setStep(5); generate(); }
+    else setStep(s => s + 1)
   }
 
   const generate = async () => {
@@ -145,7 +78,6 @@ export default function OnboardingPage() {
         body: JSON.stringify({
           ...data,
           userName: user?.user_metadata?.full_name || user?.email?.split('@')[0],
-          selfieUrl: selfiePermission && selfieUrl ? selfieUrl : null,
         }),
       })
       const json = await res.json()
@@ -177,12 +109,10 @@ export default function OnboardingPage() {
       why: data.why,
       obstacles: data.obstacles,
       aesthetic: data.aesthetic,
-      user_gender: data.gender || null,
-      user_age: data.age || null,
-      user_ethnicity: data.ethnicity || null,
-      user_city: data.city || null,
-      selfie_url: selfiePermission && selfieUrl ? selfieUrl : null,
-      selfie_permission: selfiePermission || false,
+      user_gender: data.gender,
+      user_age: data.age,
+      user_ethnicity: data.ethnicity,
+      user_city: data.city,
       art_title: result.artTitle,
       art_description: result.artDescription,
       affirmation: result.affirmation,
@@ -194,25 +124,12 @@ export default function OnboardingPage() {
       is_active: true,
     })
     if (error) { toast.error('Failed to save goal: ' + error.message); return }
-
-    // Save demographics + selfie to profile so we don't ask again
-    const profileUpdate: any = {}
-    if (data.gender) profileUpdate.user_gender = data.gender
-    if (data.age) profileUpdate.user_age = data.age
-    if (data.ethnicity) profileUpdate.user_ethnicity = data.ethnicity
-    if (data.city) profileUpdate.user_city = data.city
-    if (selfiePermission && selfieUrl) profileUpdate.selfie_url = selfieUrl
-    if (Object.keys(profileUpdate).length > 0) {
-      await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
-    }
-
     toast.success('Your manifest is live!')
     router.push('/dashboard')
   }
 
   const aes = AES.find(a => a.label === data.aesthetic)
-  const currentIdx = steps.indexOf(step)
-  const progress = step === 6 ? 100 : ((currentIdx + 1) / (steps.length + 1)) * 100
+  const progress = (step / TOTAL_STEPS) * 100
 
   return (
     <div className="min-h-screen bg-[#f8f7f5] flex items-center justify-center p-6">
@@ -222,10 +139,10 @@ export default function OnboardingPage() {
         </div>
         <div className="p-10">
 
-          {/* Step 0 — Goal */}
+          {/* Step 0 â€” Goal */}
           {step === 0 && (
             <div className="fade-up">
-              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 1 of {TOTAL_STEPS}</p>
+              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 1 of 5</p>
               <h2 className="font-serif text-[28px] mb-1.5">What's your goal?</h2>
               <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">Be specific. A vague goal stays a wish.</p>
               <div className="mb-5">
@@ -243,10 +160,10 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 1 — Timeline */}
+          {/* Step 1 â€” Timeline */}
           {step === 1 && (
             <div className="fade-up">
-              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 2 of {TOTAL_STEPS}</p>
+              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 2 of 5</p>
               <h2 className="font-serif text-[28px] mb-1.5">Your timeline</h2>
               <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">When will this be achieved?</p>
               <div className="flex flex-wrap gap-2">
@@ -265,10 +182,10 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 2 — Why */}
+          {/* Step 2 â€” Why */}
           {step === 2 && (
             <div className="fade-up">
-              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 3 of {TOTAL_STEPS}</p>
+              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 3 of 5</p>
               <h2 className="font-serif text-[28px] mb-1.5">Your deeper why</h2>
               <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">This is what carries you through hard days.</p>
               <div className="mb-4">
@@ -282,10 +199,10 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 3 — Aesthetic */}
+          {/* Step 3 â€” Aesthetic */}
           {step === 3 && (
             <div className="fade-up">
-              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 4 of {TOTAL_STEPS}</p>
+              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 4 of 5</p>
               <h2 className="font-serif text-[28px] mb-1.5">Your visual style</h2>
               <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">Your vision board will be styled to match.</p>
               <div className="grid grid-cols-2 gap-3">
@@ -300,87 +217,21 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 4 — Selfie (only shown if first goal or no selfie yet) */}
-          {step === 4 && needsSelfieStep && (
+          {/* Step 4 â€” About you (gender + age for personalised vision art) */}
+          {step === 4 && (
             <div className="fade-up">
-              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step {steps.indexOf(4) + 1} of {TOTAL_STEPS}</p>
-              <h2 className="font-serif text-[28px] mb-1.5">Make your vision art personal</h2>
-              <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">
-                Upload a selfie and we'll create an AI version of <strong>you</strong> in your vision art — so it truly looks like your future.
-              </p>
-
-              <input
-                ref={selfieRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleSelfie(f); e.target.value = '' }}
-              />
-
-              {selfie || selfieUrl ? (
-                <div className="mb-5">
-                  <div className="relative w-32 h-32 mx-auto mb-3">
-                    <img
-                      src={selfie || selfieUrl || ''}
-                      alt="Your selfie"
-                      className="w-32 h-32 rounded-full object-cover border-4 border-[#b8922a]/20"
-                    />
-                    {uploadingSelfie && (
-                      <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
-                        <div className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full spin-anim"/>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-center text-[13px] text-green-600 font-medium mb-3">✓ Photo uploaded</p>
-
-                  {/* Permission checkbox */}
-                  <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-xl p-4 mb-3">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selfiePermission === true}
-                        onChange={e => setSelfiePermission(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 accent-[#b8922a]"
-                      />
-                      <span className="text-[13px] text-[#666] leading-[1.5]">
-                        I give permission for my photo to be used to create an AI-generated vision art image of me. I understand this is only for vision art and will not be shared.
-                      </span>
-                    </label>
-                  </div>
-
-                  <button
-                    onClick={() => { setSelfie(null); setSelfieUrl(null); setSelfiePermission(null) }}
-                    className="w-full py-2 border border-[#e8e8e8] rounded-xl text-[13px] text-[#999] hover:bg-[#f8f7f5]"
-                  >
-                    Remove photo
-                  </button>
-                </div>
-              ) : (
-                <div className="mb-5">
-                  <button
-                    onClick={() => selfieRef.current?.click()}
-                    disabled={uploadingSelfie}
-                    className="w-full py-4 border-2 border-dashed border-[#e8e8e8] rounded-2xl flex flex-col items-center gap-2 hover:border-[#b8922a]/40 transition-colors disabled:opacity-50"
-                  >
-                    <div className="w-14 h-14 rounded-full bg-[#f8f7f5] flex items-center justify-center text-[24px]">📸</div>
-                    <p className="text-[13px] font-medium text-[#111]">Take or upload a selfie</p>
-                    <p className="text-[11px] text-[#999]">JPG, PNG or WebP · Max 10MB</p>
-                  </button>
-                  <p className="text-[11px] text-center text-[#bbb] mt-2">Totally optional — skip to use generic AI art</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 5 — Demographics (only for first goal) */}
-          {step === 5 && needsDemoStep && (
-            <div className="fade-up">
-              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step {steps.indexOf(5) + 1} of {TOTAL_STEPS}</p>
-              <h2 className="font-serif text-[28px] mb-1.5">A little about you</h2>
-              <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">Used to personalise your vision art and coaching. Only asked once — all optional.</p>
+              <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 5 of 5</p>
+              <h2 className="font-serif text-[28px] mb-1.5">About you</h2>
+              <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">{profileHasInfo ? "Your personal details are pre-filled — update if anything changed." : "Used to personalise your vision board imagery. Totally optional — skip anytime."}</p>
               <div className="mb-5">
-                <label className="block text-[12px] font-medium text-[#666] mb-2">Your city <span className="text-[#999] font-normal">(optional — makes your vision art location-specific)</span></label>
-                <input type="text" value={data.city} onChange={e => upd('city', e.target.value)} placeholder="e.g. Austin, New York, London" className="w-full px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111] transition-colors"/>
+                <label className="block text-[12px] font-medium text-[#666] mb-2">Your city <span className="text-[#999] font-normal">(optional â€” makes your vision art location-specific)</span></label>
+                <input
+                  type="text"
+                  value={data.city}
+                  onChange={e => upd('city', e.target.value)}
+                  placeholder="e.g. Austin, New York, London"
+                  className="w-full px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111] transition-colors"
+                />
               </div>
               <div className="mb-5">
                 <label className="block text-[12px] font-medium text-[#666] mb-2">Gender <span className="text-[#999] font-normal">(optional)</span></label>
@@ -390,9 +241,17 @@ export default function OnboardingPage() {
                   ))}
                 </div>
               </div>
-              <div className="mb-5">
+              <div>
                 <label className="block text-[12px] font-medium text-[#666] mb-2">Age <span className="text-[#999] font-normal">(optional)</span></label>
-                <input type="number" min="13" max="100" value={data.age} onChange={e => upd('age', e.target.value)} placeholder="e.g. 24" className="w-28 px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111] transition-colors"/>
+                <input
+                  type="number"
+                  min="13"
+                  max="100"
+                  value={data.age}
+                  onChange={e => upd('age', e.target.value)}
+                  placeholder="e.g. 24"
+                  className="w-28 px-3.5 py-2.5 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#111] transition-colors"
+                />
               </div>
               <div className="mb-5">
                 <label className="block text-[12px] font-medium text-[#666] mb-2">Ethnicity <span className="text-[#999] font-normal">(optional)</span></label>
@@ -402,30 +261,27 @@ export default function OnboardingPage() {
                   ))}
                 </div>
               </div>
-              <div className="p-4 bg-[#f8f7f5] rounded-xl">
+              <div className="mt-2 p-4 bg-[#f8f7f5] rounded-xl">
                 <p className="text-[12px] text-[#999]">This is only used to personalise your vision board. It is never shared or used for ads.</p>
               </div>
             </div>
           )}
 
-          {/* Step 6 — Result */}
-          {step === 6 && (
+          {/* Step 5 â€” Result */}
+          {step === 5 && (
             <div className="fade-up">
               {generating ? (
                 <div className="text-center py-12">
                   <div className="w-10 h-10 border-2 border-[#e8e8e8] border-t-[#b8922a] rounded-full spin-anim mx-auto mb-5"/>
                   <h3 className="font-serif text-[24px] mb-2">Creating your manifest...</h3>
                   <p className="text-[14px] text-[#666]">AI is personalizing everything for you</p>
-                  {selfiePermission && selfieUrl && (
-                    <p className="text-[12px] text-[#b8922a] mt-2">✦ Using your photo for personalised vision art</p>
-                  )}
                 </div>
               ) : result && (
                 <>
                   <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Your manifest is ready</p>
                   <h2 className="font-serif text-[26px] mb-5">Welcome, {user?.user_metadata?.full_name?.split(' ')[0] || 'friend'}.</h2>
                   <div className="rounded-2xl overflow-hidden mb-4 relative" style={{ background: aes?.bg || '#1a1a2e', minHeight: 140 }}>
-                    <div className="absolute inset-0 flex items-center justify-center font-serif text-[80px] opacity-[0.07]" style={{ color: aes?.fg }}>✦</div>
+                    <div className="absolute inset-0 flex items-center justify-center font-serif text-[80px] opacity-[0.07]" style={{ color: aes?.fg }}>âœ¦</div>
                     <div className="relative z-10 p-6">
                       <p className="font-serif italic text-[20px] mb-1.5" style={{ color: aes?.fg }}>{result.artTitle}</p>
                       <p className="text-[12px] leading-[1.6]" style={{ color: aes?.bg === '#e8e5de' ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.5)' }}>{result.artDescription}</p>
@@ -450,7 +306,7 @@ export default function OnboardingPage() {
                     </div>
                   </div>
                   <button onClick={activate} className="w-full py-3.5 bg-[#b8922a] text-white rounded-xl text-[14px] font-medium hover:bg-[#9a7820] transition-colors">
-                    Activate my manifest →
+                    Activate my manifest â†’
                   </button>
                 </>
               )}
@@ -458,13 +314,13 @@ export default function OnboardingPage() {
           )}
 
           {/* Footer nav */}
-          {step < 6 && (
+          {step < 5 && (
             <div className="flex justify-between items-center mt-7 pt-5 border-t border-[#e8e8e8]">
               {step > 0 ? (
-                <button onClick={back} className="px-4 py-2 text-[13px] font-medium border border-[#e8e8e8] rounded-lg hover:bg-[#f8f7f5] transition-colors">← Back</button>
+                <button onClick={()=>setStep(s=>s-1)} className="px-4 py-2 text-[13px] font-medium border border-[#e8e8e8] rounded-lg hover:bg-[#f8f7f5] transition-colors">â† Back</button>
               ) : <div/>}
               <button onClick={next} className="px-5 py-2.5 bg-[#111] text-white rounded-lg text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">
-                {currentIdx === steps.length - 1 ? 'Create my manifest ✦' : 'Continue →'}
+                {step === 4 ? 'Create my manifest âœ¦' : 'Continue â†’'}
               </button>
             </div>
           )}

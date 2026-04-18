@@ -213,7 +213,7 @@ export default function DashboardClient({
             <p className="font-serif text-[20px] text-white mb-1">Daily check-in</p>
             <p className="text-[13px] text-white/50">Did you work toward "{goal.title}" today?</p>
           </div>
-          <CheckInButton goalId={goal.id} />
+          <CheckInButton goalId={goal.id} todayTask={todayTask ?? null} />
         </div>
       )}
 

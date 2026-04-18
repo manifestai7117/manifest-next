@@ -11,26 +11,86 @@ const serviceSupabase = createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Immediately download DALL-E temp URL → Supabase Storage (permanent, never expires)
-async function persistImage(tempUrl: string, goalId: string, idx: number): Promise<string> {
+// Persist image URL to Supabase Storage permanently (DALL-E URLs expire in ~1 hour)
+async function persistImage(imageUrl: string, goalId: string, idx: number): Promise<string> {
   try {
-    const res = await fetch(tempUrl, { signal: AbortSignal.timeout(30000) })
-    if (!res.ok) return tempUrl
+    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(30000) })
+    if (!res.ok) return imageUrl
     const buffer = Buffer.from(await res.arrayBuffer())
-    const filename = `vision-art/${goalId}/option-${idx}-${Date.now()}.png`
+    const filename = `vision-art/${goalId}/option-${idx}-${Date.now()}.jpg`
     const { error } = await serviceSupabase.storage
       .from('user-media')
-      .upload(filename, buffer, { contentType: 'image/png', upsert: true, cacheControl: '31536000' })
-    if (error) { console.error('Storage upload error:', error); return tempUrl }
+      .upload(filename, buffer, { contentType: 'image/jpeg', upsert: true, cacheControl: '31536000' })
+    if (error) { console.error('Storage upload error:', error); return imageUrl }
     const { data: { publicUrl } } = serviceSupabase.storage.from('user-media').getPublicUrl(filename)
     return publicUrl
   } catch (e) {
     console.error('persistImage error:', e)
-    return tempUrl
+    return imageUrl
   }
 }
 
-async function generateDalleImage(prompt: string): Promise<string | null> {
+// Generate with Flux via Replicate — far superior photorealism vs DALL-E
+// Falls back to DALL-E if Replicate key not set
+async function generateImage(prompt: string, aspectRatio = '2:3'): Promise<string | null> {
+  const replicateKey = process.env.REPLICATE_API_TOKEN
+
+  if (replicateKey) {
+    try {
+      // Start Flux prediction
+      const startRes = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-1.1-pro/predictions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${replicateKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'wait=60', // wait up to 60s for result
+        },
+        body: JSON.stringify({
+          input: {
+            prompt,
+            aspect_ratio: aspectRatio, // '2:3' for portrait
+            output_format: 'jpeg',
+            output_quality: 90,
+            safety_tolerance: 2,
+            prompt_upsampling: false,
+          },
+        }),
+        signal: AbortSignal.timeout(90000),
+      })
+
+      if (startRes.ok) {
+        const prediction = await startRes.json()
+        // If returned with 'wait', output is already there
+        if (prediction.output) {
+          const out = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output
+          if (typeof out === 'string' && out.startsWith('http')) return out
+        }
+        // Poll for completion if still processing
+        if (prediction.id && prediction.status !== 'succeeded') {
+          const predId = prediction.id
+          for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 3000))
+            const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predId}`, {
+              headers: { 'Authorization': `Bearer ${replicateKey}` },
+              signal: AbortSignal.timeout(10000),
+            })
+            if (!pollRes.ok) break
+            const poll = await pollRes.json()
+            if (poll.status === 'succeeded') {
+              const out = Array.isArray(poll.output) ? poll.output[0] : poll.output
+              if (typeof out === 'string') return out
+              break
+            }
+            if (poll.status === 'failed' || poll.status === 'canceled') break
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('Replicate error:', e.message)
+    }
+  }
+
+  // Fallback: DALL-E 3
   try {
     const res = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
@@ -39,7 +99,7 @@ async function generateDalleImage(prompt: string): Promise<string | null> {
         model: 'dall-e-3',
         prompt: prompt.slice(0, 4000),
         n: 1,
-        size: '1024x1792', // portrait
+        size: '1024x1792',
         quality: 'standard',
         style: 'vivid',
       }),
@@ -49,7 +109,7 @@ async function generateDalleImage(prompt: string): Promise<string | null> {
     const data = await res.json()
     return data.data?.[0]?.url ?? null
   } catch (e: any) {
-    console.error('DALL-E fetch error:', e.message)
+    console.error('DALL-E error:', e.message)
     return null
   }
 }
@@ -65,45 +125,58 @@ export async function POST(request: Request) {
       .from('goals').select('*').eq('id', goalId).eq('user_id', user.id).single()
     if (!goal) return NextResponse.json({ error: 'Goal not found' }, { status: 404 })
 
-    const personParts = [
-      goal.user_gender && goal.user_gender !== 'Prefer not to say' ? goal.user_gender.toLowerCase() : null,
-      goal.user_age ? `${goal.user_age}-year-old` : null,
-      goal.user_ethnicity && goal.user_ethnicity !== 'Prefer not to say' ? goal.user_ethnicity : null,
-    ].filter(Boolean)
-    const personDesc = personParts.length > 0 ? personParts.join(' ') : 'person'
-    const city = goal.user_city || 'the city'
+    // Build rich context
+    const city = goal.user_city || ''
     const aesthetic = goal.aesthetic || 'Bold & dark'
+    const age = goal.user_age || 25
+    const ethnicity = goal.user_ethnicity && goal.user_ethnicity !== 'Prefer not to say' ? goal.user_ethnicity : ''
+    const gender = goal.user_gender && goal.user_gender !== 'Prefer not to say' ? goal.user_gender.toLowerCase() : 'person'
 
-    const aestheticStyle = {
-      'Bold & dark': 'dramatic chiaroscuro lighting, deep shadows, high contrast, cinematic',
-      'Warm & natural': 'golden hour light, warm earth tones, soft shadows, organic textures',
-      'Minimal & clean': 'clean natural light, minimal composition, airy negative space, calm',
-      'Bright & energetic': 'vibrant saturated colors, dynamic angles, kinetic energy, bold',
-    }[aesthetic] || 'cinematic, dramatic lighting'
+    // Aesthetic-specific style guidance
+    const styleMap: Record<string, string> = {
+      'Bold & dark':        'dramatic lighting, deep shadows, high contrast, moody atmosphere, cinematic',
+      'Warm & natural':     'golden hour sunlight, warm amber tones, soft bokeh, natural textures, organic',
+      'Minimal & clean':    'clean bright light, minimal composition, open space, calm, understated elegance',
+      'Bright & energetic': 'vibrant saturated colors, dynamic composition, energetic, sharp clarity',
+    }
+    const style = styleMap[aesthetic] || 'cinematic, dramatic'
 
-    // Step 1: Generate 3 DISTINCT concept types with Claude Haiku
+    // Step 1: Generate 3 specific scene concepts with Claude
     const conceptRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1000,
       messages: [{
         role: 'user',
-        content: `Create 3 vision board images for this goal. Each image must be a COMPLETELY DIFFERENT visual type.
+        content: `You are writing prompts for a photorealistic AI image generator (Flux 1.1 Pro) for a vision board.
 
-GOAL: "${goal.title}"
-WHY: ${goal.why || 'personal growth'}
-PERSON: ${personDesc} in ${city}
-AESTHETIC: ${aesthetic} — ${aestheticStyle}
+Goal: "${goal.title}"
+Person: ${age}-year-old ${ethnicity} ${gender}${city ? ` in ${city}` : ''}
+Aesthetic: ${aesthetic}
+Style: ${style}
 
-IMPORTANT — The 3 images MUST follow these exact types:
-1. PERSON IMAGE: A ${personDesc} silhouette or figure (shown from behind or mid-distance, never a portrait face) in the moment of achieving this goal. Real location, golden moment, powerful.
-2. ACTIVITY IMAGE: The specific activity, equipment, environment, or practice involved in achieving this goal — NO person at all. Just the scene, tools, or setting.
-3. SYMBOLIC IMAGE: An abstract or symbolic visual metaphor representing the essence of this goal — could be nature, architecture, light, patterns, or objects. Conceptual, not literal. NO person.
+Generate exactly 3 image concepts. Each MUST be a different visual type:
 
-Return ONLY valid JSON array, no markdown:
+IMAGE 1 — PERSON (silhouette/back view only — never a face or frontal portrait):
+A powerful silhouette or back-view shot of the person at the moment of achieving their goal. Real location. No face visible. The body language and environment tell the story. Cinematic.
+
+IMAGE 2 — PLACE/SCENE (no person at all):
+The specific environment, location, or setting associated with achieving this goal. Beautifully lit. No people. Just the space itself — gym, court, office, nature, etc. Photographic.
+
+IMAGE 3 — SYMBOL/OBJECT (no person, abstract or still life):
+A close-up, still life, or symbolic object that represents the essence of achieving this goal. Could be equipment, food, a trophy, nature, architecture. No person at all.
+
+CRITICAL rules for the prompts:
+- Be hyper-specific — name real places, real equipment, real lighting conditions
+- For IMAGE 1: describe body from behind or as silhouette only — say "viewed from behind" or "silhouette" explicitly
+- For IMAGE 2 & 3: explicitly say "no people" or "empty scene"
+- Each prompt must end with: "${style}, photorealistic, shot on Sony A7R IV, 8K, no text"
+- NO AI art clichés: no glowing effects, no floating particles, no lens flares on everything
+
+Return ONLY valid JSON, no markdown:
 [
-  {"type":"person","label":"3-5 word title","description":"one sentence","dallePrompt":"detailed DALL-E prompt, portrait orientation 1024x1792, ${aestheticStyle}, photorealistic, 8K, no text"},
-  {"type":"activity","label":"3-5 word title","description":"one sentence","dallePrompt":"detailed DALL-E prompt focusing on the activity/scene/equipment without any person, portrait orientation, ${aestheticStyle}, photorealistic, 8K, no text"},
-  {"type":"symbolic","label":"3-5 word title","description":"one sentence","dallePrompt":"detailed symbolic/metaphorical DALL-E prompt with no person at all, abstract or nature-based visual, portrait orientation, ${aestheticStyle}, photorealistic, 8K, no text"}
+  {"label":"short title","description":"one sentence","prompt":"full detailed image generation prompt"},
+  {"label":"short title","description":"one sentence","prompt":"full detailed image generation prompt"},
+  {"label":"short title","description":"one sentence","prompt":"full detailed image generation prompt"}
 ]`,
       }],
     })
@@ -112,73 +185,70 @@ Return ONLY valid JSON array, no markdown:
     try {
       const raw = conceptRes.content[0].type === 'text' ? conceptRes.content[0].text : '[]'
       concepts = JSON.parse(raw.replace(/```json|```/g, '').trim())
-      if (!Array.isArray(concepts) || concepts.length < 3) throw new Error('not 3')
+      if (!Array.isArray(concepts) || concepts.length < 3) throw new Error('need 3')
     } catch {
-      // Fallback concepts if Claude fails
+      // Solid fallback prompts
+      const goalShort = goal.title.slice(0, 80)
       concepts = [
         {
-          type: 'person',
           label: 'The Victory Moment',
-          description: `Achieving: ${goal.title}`,
-          dallePrompt: `A ${personDesc} silhouette viewed from behind standing triumphantly in ${city}, having achieved ${goal.title}. ${aestheticStyle}, photorealistic, 8K, no text, no watermarks`,
+          description: 'Achieving the goal',
+          prompt: `${age}-year-old ${ethnicity} ${gender} silhouette viewed from behind, standing triumphantly${city ? ` in ${city}` : ''}, having achieved: ${goalShort}. Full body back view, powerful posture, beautiful environment. ${style}, photorealistic, shot on Sony A7R IV, 8K, no text`,
         },
         {
-          type: 'activity',
-          label: 'The Practice',
-          description: `The work behind: ${goal.title}`,
-          dallePrompt: `The environment, tools, and setting associated with ${goal.title} in ${city}, no people, showing the space and equipment beautifully. ${aestheticStyle}, photorealistic, 8K, no text, no watermarks`,
+          label: 'The Arena',
+          description: 'The environment of success',
+          prompt: `The specific environment for achieving: ${goalShort}${city ? ` in ${city}` : ''}. Beautiful, empty scene, no people. Perfect lighting showing every detail of the space. ${style}, photorealistic, shot on Sony A7R IV, 8K, no text`,
         },
         {
-          type: 'symbolic',
-          label: 'The Essence',
-          description: `Symbol of: ${goal.title}`,
-          dallePrompt: `Abstract symbolic visual metaphor for ${goal.title}. Natural elements, light, or geometric forms conveying the feeling of this achievement. No people. ${aestheticStyle}, photorealistic, 8K, no text, no watermarks`,
+          label: 'The Symbol',
+          description: 'What achievement looks like',
+          prompt: `Close-up still life of objects symbolising achievement of: ${goalShort}. No people, no person. Beautifully composed flat lay or macro shot. ${style}, photorealistic, shot on Sony A7R IV, 8K, no text`,
         },
       ]
     }
 
-    // Step 2: Generate all 3 images in parallel, with stagger + retry
+    // Step 2: Generate all 3 in parallel with stagger + retry
     const generateWithRetry = async (prompt: string, idx: number): Promise<string | null> => {
-      await new Promise(r => setTimeout(r, idx * 700)) // stagger to avoid rate limits
-      let url = await generateDalleImage(prompt)
+      await new Promise(r => setTimeout(r, idx * 800)) // stagger
+      let url = await generateImage(prompt)
       if (!url) {
-        console.log(`Image ${idx} failed on first try, retrying after 3s...`)
-        await new Promise(r => setTimeout(r, 3000))
-        url = await generateDalleImage(prompt)
+        console.log(`Image ${idx} failed, retrying after 4s...`)
+        await new Promise(r => setTimeout(r, 4000))
+        url = await generateImage(prompt)
       }
       return url
     }
 
     const results = await Promise.all(
-      concepts.slice(0, 3).map(async (concept: any, i: number) => {
-        const tempUrl = await generateWithRetry(concept.dallePrompt, i)
-        // Immediately persist to Supabase Storage — DALL-E URLs expire in ~1 hour
+      concepts.slice(0, 3).map(async (c: any, i: number) => {
+        const tempUrl = await generateWithRetry(c.prompt, i)
         const permanentUrl = tempUrl ? await persistImage(tempUrl, goalId, i) : null
         return {
-          label: concept.label || `Vision ${i + 1}`,
-          description: concept.description || '',
-          type: concept.type || ['person', 'activity', 'symbolic'][i],
+          label: c.label || `Vision ${i + 1}`,
+          description: c.description || '',
+          prompt: c.prompt,
           imageUrl: permanentUrl,
         }
       })
     )
 
     const successCount = results.filter(r => r.imageUrl).length
-    console.log(`Vision art: ${successCount}/3 generated for goal ${goalId}`)
+    console.log(`Vision art: ${successCount}/3 succeeded for goal ${goalId}`)
 
     if (successCount === 0) {
-      return NextResponse.json({ error: 'Image generation failed. Please try again in a moment.', options: [] }, { status: 500 })
+      return NextResponse.json({ error: 'Generation failed — please try again.', options: [] }, { status: 500 })
     }
 
-    // Save to DB (permanent URLs — never expire)
+    // Save permanent URLs to DB
     await serviceSupabase.from('goals').update({
       vision_options: JSON.stringify(results),
       vision_chosen_idx: null,
     }).eq('id', goalId)
 
     return NextResponse.json({ options: results, successCount })
-  } catch (error: any) {
-    console.error('Vision art error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (e: any) {
+    console.error('Vision art error:', e)
+    return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
