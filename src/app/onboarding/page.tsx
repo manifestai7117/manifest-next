@@ -306,7 +306,7 @@ export default function OnboardingPage() {
                     </div>
                   </div>
                   <button onClick={activate} className="w-full py-3.5 bg-[#b8922a] text-white rounded-xl text-[14px] font-medium hover:bg-[#9a7820] transition-colors">
-                    Activate my manifest â†’
+                    Activate my manifest →
                   </button>
                 </>
               )}
@@ -317,10 +317,10 @@ export default function OnboardingPage() {
           {step < 5 && (
             <div className="flex justify-between items-center mt-7 pt-5 border-t border-[#e8e8e8]">
               {step > 0 ? (
-                <button onClick={()=>setStep(s=>s-1)} className="px-4 py-2 text-[13px] font-medium border border-[#e8e8e8] rounded-lg hover:bg-[#f8f7f5] transition-colors">â† Back</button>
+                <button onClick={()=>setStep(s=>s-1)} className="px-4 py-2 text-[13px] font-medium border border-[#e8e8e8] rounded-lg hover:bg-[#f8f7f5] transition-colors">← Back</button>
               ) : <div/>}
               <button onClick={next} className="px-5 py-2.5 bg-[#111] text-white rounded-lg text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">
-                {step === 4 ? 'Create my manifest âœ¦' : 'Continue â†’'}
+                {step === 4 ? 'Create my manifest âœ¦' : 'Continue →'}
               </button>
             </div>
           )}

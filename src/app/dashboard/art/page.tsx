@@ -22,6 +22,8 @@ export default function VisionArtPage() {
   const [printOrdered, setPrintOrdered] = useState<string[]>([])
   const [emailSent, setEmailSent] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [shared, setShared] = useState(false)
+  const [sharing, setSharing] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -41,6 +43,31 @@ export default function VisionArtPage() {
     }
     load()
   }, [])
+
+  const shareToFeed = async () => {
+    if (!visionImage || sharing || shared) return
+    setSharing(true)
+    try {
+      const supabaseClient = createClient()
+      const { data: { user } } = await supabaseClient.auth.getUser()
+      if (!user) return
+      await supabaseClient.from('feed_posts').insert({
+        user_id: user.id,
+        content: `My vision for "${selectedGoal.title}" — generated with Manifest AI ✦`,
+        post_type: 'milestone',
+        visibility: 'public',
+        media_url: visionImage.imageUrl,
+        media_type: 'image',
+        goal_id: selectedGoal.id,
+        goal_title: selectedGoal.title,
+      })
+      setShared(true)
+      toast.success('Shared to your feed! Inspire others 🔥')
+    } catch {
+      toast.error('Could not share — try again')
+    }
+    setSharing(false)
+  }
 
   const loadSavedVision = (g: any) => {
     if (g.vision_options) {
@@ -137,6 +164,13 @@ export default function VisionArtPage() {
             </button>
           )}
           {emailSent && <span className="px-4 py-2.5 text-[13px] text-green-600 font-medium">✓ Sent!</span>}
+          {visionImage && !shared && (
+            <button onClick={shareToFeed} disabled={sharing}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium hover:bg-[#9a7820] disabled:opacity-50 transition-colors">
+              {sharing ? 'Sharing...' : '↑ Share to feed'}
+            </button>
+          )}
+          {shared && <span className="px-4 py-2.5 text-[13px] text-green-600 font-medium">✓ Shared!</span>}
           <button onClick={generate} disabled={generating}
             className="flex items-center gap-2 px-4 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50 transition-colors">
             {generating
@@ -210,8 +244,28 @@ export default function VisionArtPage() {
                 )}
               </div>
 
-              {/* Order print CTA */}
-              <div className="mt-4 max-w-[420px] mx-auto">
+              {/* Share + print CTAs */}
+              <div className="mt-4 max-w-[420px] mx-auto space-y-2">
+                {!shared ? (
+                  <div className="bg-[#111] rounded-2xl p-4 flex items-center gap-4">
+                    <div className="flex-1">
+                      <p className="text-white text-[13px] font-medium mb-0.5">Inspire your friends</p>
+                      <p className="text-white/50 text-[11px]">Share your vision to your feed — let others see what you're working toward</p>
+                    </div>
+                    <button onClick={shareToFeed} disabled={sharing}
+                      className="flex-shrink-0 px-4 py-2 bg-[#b8922a] text-white rounded-xl text-[12px] font-medium hover:bg-[#9a7820] disabled:opacity-50 transition-colors">
+                      {sharing ? '...' : 'Share'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3">
+                    <span className="text-[20px]">🔥</span>
+                    <div>
+                      <p className="text-green-700 text-[13px] font-medium">Shared to your feed!</p>
+                      <p className="text-green-600/70 text-[11px]">Your vision is inspiring others</p>
+                    </div>
+                  </div>
+                )}
                 <button onClick={() => setTab('print')}
                   className="w-full py-3 border-2 border-dashed border-[#b8922a]/40 text-[#b8922a] text-[13px] font-medium rounded-2xl hover:border-[#b8922a] transition-colors">
                   🖼 Order a print of this →
