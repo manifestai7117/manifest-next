@@ -235,15 +235,20 @@ async function generateTask({ supabase, userId, goal, goalId, today, yesterdayDo
     `Day task (${t.task_date}): "${t.task}" — ${t.yesterday_done === true ? `Done: "${t.yesterday_note}"` : t.yesterday_done === false ? `Not done: "${t.yesterday_note}"` : 'Not logged'}`
   ).join('\n') || 'No previous tasks'
 
-  const yesterdayContext = isDay1
-    ? 'This is Day 1 — no previous task.'
-    : yesterdayDone === true
-      ? `Yesterday's task: COMPLETED. User said: "${yesterdayNote || 'Done'}"`
-      : yesterdayDone === false
-        ? `Yesterday's task: NOT COMPLETED. User said: "${yesterdayNote || 'Did not do it"}"`
-        : 'No yesterday log available.'
+  const notDoneNote = yesterdayNote || 'Did not complete it'
+  const doneNote = yesterdayNote || 'Done'
+  let yesterdayContext: string
+  if (isDay1) {
+    yesterdayContext = 'This is Day 1 — no previous task.'
+  } else if (yesterdayDone === true) {
+    yesterdayContext = 'Yesterday task: COMPLETED. User said: ' + doneNote
+  } else if (yesterdayDone === false) {
+    yesterdayContext = 'Yesterday task: NOT COMPLETED. User said: ' + notDoneNote
+  } else {
+    yesterdayContext = 'No yesterday log available.'
+  }
 
-  const moodHistory = recentCheckins?.map((c: any) => `mood ${c.mood}/5${c.note ? ` — "${c.note}"` : ''}`).join(', ') || 'no data'
+  const moodHistory = recentCheckins?.map((c: any) => { const n = c.note ? ` — "${c.note}"` : ''; return `mood ${c.mood}/5${n}` }).join(', ') || 'no data'
 
   const prompt = `You are a personal coach generating one specific, achievable daily task.
 
