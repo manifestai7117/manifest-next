@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useState, useEffect } from 'react'
-import NotificationBell from './NotificationBell'
 
 const NAV = [
   { href: '/dashboard',         label: 'My Goals',   emoji: '⌂' },
@@ -146,7 +145,6 @@ export default function DashboardShell({ children, profile }: { children: React.
           manifest<span className="text-[#b8922a]">.</span>
         </Link>
         <div className="flex items-center gap-3">
-          <NotificationBell />
           {/* Hamburger — three lines, perfectly aligned right */}
           <button
             onClick={() => setMobileOpen(true)}
@@ -162,9 +160,7 @@ export default function DashboardShell({ children, profile }: { children: React.
 
       {/* Main content */}
       <main className="flex-1 md:ml-[220px] min-h-screen">
-        <div className="hidden md:flex items-center justify-end px-6 py-3 border-b border-[#e8e8e8] bg-white sticky top-0 z-20">
-          <NotificationBell />
-        </div>
+        
         <ScrollRestorer pathname={pathname}>
           <div className="p-4 md:p-8 pt-20 md:pt-6 pb-24 md:pb-8">
             {children}
