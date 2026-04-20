@@ -282,11 +282,11 @@ export default function DashboardHomeClient({ goals: initialGoals, allDailyState
 
   // ── Goal management ───────────────────────────────────────────
   const saveGoal = async () => {
-    if (!editForm.title.trim()){toast.error('Title required');return}
+    if (!editForm.timeline){toast.error('Please select a timeline');return}
     setSaving(true)
-    const {error} = await supabase.from('goals').update({title:editForm.title.trim(),why:editForm.why.trim(),timeline:editForm.timeline,updated_at:new Date().toISOString()}).eq('id',goal.id)
+    const {error} = await supabase.from('goals').update({timeline:editForm.timeline,updated_at:new Date().toISOString()}).eq('id',goal.id)
     if (error){toast.error('Save failed');setSaving(false);return}
-    const updated = {...goal,title:editForm.title.trim(),why:editForm.why.trim(),timeline:editForm.timeline}
+    const updated = {...goal,timeline:editForm.timeline}
     setGoals(prev=>prev.map(g=>g.id===goal.id?updated:g))
     setEditing(false); setSaving(false)
     toast.success('Goal updated!')
@@ -442,18 +442,8 @@ export default function DashboardHomeClient({ goals: initialGoals, allDailyState
 
       {/* ── EDIT FORM ───────────────────────────────────────── */}
       {editing && (
-        <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-2xl p-5 mb-5 space-y-4">
-          <p className="text-[12px] text-[#b8922a]">Updating title or timeline refreshes your coach's context on the next message.</p>
-          <div>
-            <label className="text-[11px] font-medium text-[#666] uppercase tracking-wide mb-1.5 block">Goal</label>
-            <textarea value={editForm.title} onChange={e=>setEditForm(p=>({...p,title:e.target.value}))}
-              className="w-full font-serif text-[16px] leading-[1.5] border border-[#e8e8e8] rounded-xl px-4 py-3 outline-none focus:border-[#b8922a] resize-none" rows={3}/>
-          </div>
-          <div>
-            <label className="text-[11px] font-medium text-[#666] uppercase tracking-wide mb-1.5 block">Why this goal?</label>
-            <textarea value={editForm.why} onChange={e=>setEditForm(p=>({...p,why:e.target.value}))}
-              className="w-full text-[14px] text-[#666] border border-[#e8e8e8] rounded-xl px-4 py-3 outline-none focus:border-[#b8922a] resize-none leading-[1.7]" rows={3}/>
-          </div>
+        <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-2xl p-5 mb-5">
+          <p className="text-[12px] text-[#b8922a] mb-4">Only your timeline can be adjusted. To change your goal or why, create a new goal.</p>
           <div>
             <label className="text-[11px] font-medium text-[#666] uppercase tracking-wide mb-1.5 block">Timeline</label>
             <select value={editForm.timeline} onChange={e=>setEditForm(p=>({...p,timeline:e.target.value}))}
