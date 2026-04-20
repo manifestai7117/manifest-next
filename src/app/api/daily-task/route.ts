@@ -63,12 +63,16 @@ export async function GET(request: Request) {
 
   if (isDay1 && !todayTask) {
     state = 'day1_no_task' // Day 1: generate immediately, no log needed
-  } else if (!isDay1 && yesterdayTask && yesterdayTask.yesterday_done === null && !todayTask) {
-    state = 'needs_yesterday_log' // Must log yesterday before getting today
   } else if (todayTask) {
     state = 'has_task'
+  } else if (!isDay1 && yesterdayTask && !todayTask) {
+    // Yesterday task exists, today doesn't — must log yesterday first
+    // Check if yesterday was already logged (yesterday_done set, or old-style completed set)
+    const alreadyLogged = yesterdayTask.yesterday_done !== null || yesterdayTask.completed !== null
+    state = alreadyLogged ? 'no_task_yet' : 'needs_yesterday_log'
   } else {
-    state = 'no_task_yet' // Shouldn't normally happen
+    // No yesterday task (new goal past day 1, or gap in streak) — just generate
+    state = 'no_task_yet'
   }
 
   return NextResponse.json({

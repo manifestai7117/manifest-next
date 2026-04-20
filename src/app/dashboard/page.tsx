@@ -61,10 +61,16 @@ export default async function DashboardPage() {
     const canUpdateStory = !latestStory || latestStory.update_date < today
 
     let state: string
-    if (isDay1 && !todayTask) state = 'day1_no_task'
-    else if (!isDay1 && yesterdayTask && yesterdayTask.yesterday_done === null && !todayTask) state = 'needs_yesterday_log'
-    else if (todayTask) state = 'has_task'
-    else state = 'no_task_yet'
+    if (isDay1 && !todayTask) {
+      state = 'day1_no_task'
+    } else if (todayTask) {
+      state = 'has_task'
+    } else if (!isDay1 && yesterdayTask && !todayTask) {
+      const alreadyLogged = yesterdayTask.yesterday_done !== null || yesterdayTask.completed !== null
+      state = alreadyLogged ? 'no_task_yet' : 'needs_yesterday_log'
+    } else {
+      state = 'no_task_yet'
+    }
 
     allDailyState[goal.id] = {
       state, todayTask, yesterdayTask,

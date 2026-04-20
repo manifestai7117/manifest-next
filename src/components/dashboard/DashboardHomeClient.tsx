@@ -279,11 +279,15 @@ export default function DashboardHomeClient({ goals, allDailyState, allCoachMsgs
           </div>
         )}
 
-        {/* STATE: no_task_yet (shouldn't normally show, but safety) */}
+        {/* STATE: no_task_yet — generate directly (gap in streak, or yesterday already logged) */}
         {ds.state === 'no_task_yet' && (
-          <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-2xl p-4 mb-4">
-            <p className="text-[13px] text-[#b8922a]">Something went wrong loading your task.</p>
-            <button onClick={() => refreshState(goal.id)} className="text-[12px] underline text-[#b8922a] mt-1">Refresh</button>
+          <div className="bg-[#faf3e0] border border-[#b8922a]/30 rounded-2xl p-5 mb-4">
+            <p className="text-[10px] font-bold tracking-[.14em] uppercase text-[#b8922a] mb-2">⚡ Ready for today</p>
+            <p className="text-[13px] text-[#666] mb-4">Get your task for today based on your progress.</p>
+            <button onClick={generateDay1Task} disabled={submitting}
+              className="px-5 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50 flex items-center gap-2 transition-colors">
+              {submitting ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full spin-anim"/>Generating...</> : "Get today's task →"}
+            </button>
           </div>
         )}
 
