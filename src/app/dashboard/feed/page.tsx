@@ -401,11 +401,18 @@ export default function FeedPage() {
     }
   }
 
-  const deletePost = async (postId: string) => {
-    if (!confirm('Delete this post?')) return
-    await supabase.from('feed_posts').delete().eq('id', postId).eq('user_id', user.id)
-    setPosts(prev => prev.filter(p => p.id !== postId))
-    toast.success('Deleted')
+  const deletePost = (postId: string) => {
+    setConfirmDeleteId(postId)
+  }
+
+  const confirmDelete = async () => {
+    if (!confirmDeleteId) return
+    setDeletingPost(true)
+    await supabase.from('feed_posts').delete().eq('id', confirmDeleteId).eq('user_id', user.id)
+    setPosts(prev => prev.filter(p => p.id !== confirmDeleteId))
+    setConfirmDeleteId(null)
+    setDeletingPost(false)
+    toast.success('Post deleted')
   }
 
   const archivePost = async (postId: string, archive: boolean) => {
@@ -427,10 +434,17 @@ export default function FeedPage() {
     toast.success(archive ? 'Archived' : 'Unarchived')
   }
 
-  const blockUser = async (blockedId: string) => {
-    if (!confirm('Block this user? Their posts will be hidden from your feed.')) return
-    await supabase.from('blocked_users').insert({ blocker_id: user.id, blocked_id: blockedId })
-    setPosts(prev => prev.filter(p => p.user_id !== blockedId))
+  const blockUser = (blockedId: string) => {
+    setConfirmBlockId(blockedId)
+  }
+
+  const confirmBlock = async () => {
+    if (!confirmBlockId) return
+    setBlockingUser(true)
+    await supabase.from('blocked_users').insert({ blocker_id: user.id, blocked_id: confirmBlockId })
+    setPosts(prev => prev.filter(p => p.user_id !== confirmBlockId))
+    setConfirmBlockId(null)
+    setBlockingUser(false)
     toast.success('User blocked')
   }
 
@@ -462,6 +476,44 @@ export default function FeedPage() {
 
   return (
     <div className="fade-up max-w-[680px]">
+
+      {/* Delete post confirmation modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+          <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-[380px] w-full p-6 shadow-2xl">
+            <div className="text-center mb-5">
+              <div className="text-[36px] mb-2">🗑</div>
+              <h3 className="font-serif text-[20px] mb-1">Delete this post?</h3>
+              <p className="text-[13px] text-[#666]">This can't be undone.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
+              <button onClick={confirmDelete} disabled={deletingPost} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[13px] font-medium hover:bg-red-600 disabled:opacity-50 transition-colors">
+                {deletingPost ? 'Deleting...' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Block user confirmation modal */}
+      {confirmBlockId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+          <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-[380px] w-full p-6 shadow-2xl">
+            <div className="text-center mb-5">
+              <div className="text-[36px] mb-2">🚫</div>
+              <h3 className="font-serif text-[20px] mb-1">Block this user?</h3>
+              <p className="text-[13px] text-[#666]">Their posts will be hidden from your feed.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmBlockId(null)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
+              <button onClick={confirmBlock} disabled={blockingUser} className="flex-1 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#333] disabled:opacity-50 transition-colors">
+                {blockingUser ? 'Blocking...' : 'Block'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="font-serif text-[32px] mb-0.5">Feed</h1>

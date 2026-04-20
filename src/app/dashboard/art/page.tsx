@@ -24,6 +24,8 @@ export default function VisionArtPage() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [shared, setShared] = useState(false)
   const [sharing, setSharing] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [shareCaption, setShareCaption] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -44,16 +46,21 @@ export default function VisionArtPage() {
     load()
   }, [])
 
-  const shareToFeed = async () => {
+  const openShareModal = () => {
+    if (shared) return
+    setShareCaption(`My vision for "${selectedGoal.title}" ✦`)
+    setShowShareModal(true)
+  }
+
+  const submitShare = async () => {
     if (!visionImage || sharing || shared) return
     setSharing(true)
     try {
-      const supabaseClient = createClient()
-      const { data: { user } } = await supabaseClient.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      await supabaseClient.from('feed_posts').insert({
+      await supabase.from('feed_posts').insert({
         user_id: user.id,
-        content: `My vision for "${selectedGoal.title}" — generated with Manifest AI ✦`,
+        content: shareCaption.trim() || `My vision for "${selectedGoal.title}" ✦`,
         post_type: 'milestone',
         visibility: 'public',
         media_url: visionImage.imageUrl,
@@ -62,7 +69,8 @@ export default function VisionArtPage() {
         goal_title: selectedGoal.title,
       })
       setShared(true)
-      toast.success('Shared to your feed! Inspire others 🔥')
+      setShowShareModal(false)
+      toast.success('Shared to your feed! 🔥')
     } catch {
       toast.error('Could not share — try again')
     }
@@ -143,6 +151,47 @@ export default function VisionArtPage() {
 
   return (
     <div className="fade-up max-w-[760px]">
+
+      {/* Share to feed modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
+          <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-[480px] w-full shadow-2xl overflow-hidden">
+            {/* Preview */}
+            <div className="relative" style={{aspectRatio:'2/3',maxHeight:320}}>
+              <img src={visionImage?.imageUrl} alt="" className="w-full h-full object-cover"/>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"/>
+              <div className="absolute bottom-3 left-4 right-4">
+                <p className="font-serif italic text-white text-[16px]">{visionImage?.label}</p>
+              </div>
+            </div>
+            {/* Edit caption */}
+            <div className="p-5">
+              <label className="text-[11px] font-medium text-[#666] uppercase tracking-wide mb-2 block">Caption</label>
+              <textarea
+                value={shareCaption}
+                onChange={e => setShareCaption(e.target.value)}
+                rows={3}
+                maxLength={280}
+                className="w-full px-4 py-3 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#b8922a] resize-none mb-1 transition-colors"
+                placeholder="Write something inspiring..."
+                autoFocus
+              />
+              <p className="text-[11px] text-[#bbb] text-right mb-4">{shareCaption.length}/280</p>
+              <div className="bg-[#f8f7f5] rounded-xl p-3 mb-4 flex items-center gap-2">
+                <span className="text-[16px]">🌍</span>
+                <p className="text-[12px] text-[#666]">Posted publicly — friends and everyone can see this</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowShareModal(false)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] hover:bg-[#f8f7f5] transition-colors">Cancel</button>
+                <button onClick={submitShare} disabled={sharing}
+                  className="flex-1 py-2.5 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium hover:bg-[#9a7820] disabled:opacity-50 transition-colors">
+                  {sharing ? 'Sharing...' : 'Share to feed ✦'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
         <div>
@@ -165,7 +214,7 @@ export default function VisionArtPage() {
           )}
           {emailSent && <span className="px-4 py-2.5 text-[13px] text-green-600 font-medium">✓ Sent!</span>}
           {visionImage && !shared && (
-            <button onClick={shareToFeed} disabled={sharing}
+            <button onClick={openShareModal} disabled={sharing}
               className="flex items-center gap-2 px-4 py-2.5 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium hover:bg-[#9a7820] disabled:opacity-50 transition-colors">
               {sharing ? 'Sharing...' : '↑ Share to feed'}
             </button>
@@ -252,7 +301,7 @@ export default function VisionArtPage() {
                       <p className="text-white text-[13px] font-medium mb-0.5">Inspire your friends</p>
                       <p className="text-white/50 text-[11px]">Share your vision to your feed — let others see what you're working toward</p>
                     </div>
-                    <button onClick={shareToFeed} disabled={sharing}
+                    <button onClick={openShareModal} disabled={sharing}
                       className="flex-shrink-0 px-4 py-2 bg-[#b8922a] text-white rounded-xl text-[12px] font-medium hover:bg-[#9a7820] disabled:opacity-50 transition-colors">
                       {sharing ? '...' : 'Share'}
                     </button>
