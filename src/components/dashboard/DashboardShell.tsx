@@ -7,8 +7,7 @@ import { useState, useEffect } from 'react'
 import NotificationBell from './NotificationBell'
 
 const NAV = [
-  { href: '/dashboard',         label: 'Overview',   emoji: '⌂' },
-  { href: '/dashboard/goal',    label: 'My Goals',   emoji: '◎' },
+  { href: '/dashboard',         label: 'My Goals',   emoji: '⌂' },
   { href: '/dashboard/coach',   label: 'AI Coach',   emoji: '✦' },
   { href: '/dashboard/circles', label: 'Circles',    emoji: '◉' },
   { href: '/dashboard/friends', label: 'Friends',    emoji: '♡' },
@@ -20,11 +19,11 @@ const NAV = [
 ]
 
 const BOTTOM_NAV = [
-  { href: '/dashboard',        label: 'Home',   emoji: '⌂' },
-  { href: '/dashboard/goal',   label: 'Goals',  emoji: '◎' },
-  { href: '/dashboard/coach',  label: 'Coach',  emoji: '✦' },
-  { href: '/dashboard/feed',   label: 'Feed',   emoji: '◈' },
-  { href: '/dashboard/streak', label: 'Streak', emoji: '⚡' },
+  { href: '/dashboard',         label: 'Goals',   emoji: '⌂' },
+  { href: '/dashboard/coach',   label: 'Coach',   emoji: '✦' },
+  { href: '/dashboard/feed',    label: 'Feed',    emoji: '◈' },
+  { href: '/dashboard/streak',  label: 'Streak',  emoji: '⚡' },
+  { href: '/dashboard/friends', label: 'Friends', emoji: '♡' },
 ]
 
 
@@ -86,7 +85,7 @@ export default function DashboardShell({ children, profile }: { children: React.
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {NAV.map(({ href, label, emoji }) => (
           <Link key={href} href={href} onClick={() => setMobileOpen(false)}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${pathname === href || (href === '/dashboard/circles' && pathname.startsWith('/dashboard/circles')) ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
+            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${pathname === href || (href === '/dashboard/circles' && pathname.startsWith('/dashboard/circles')) || (href === '/dashboard' && pathname === '/dashboard') ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f8f7f5] hover:text-[#111]'}`}>
             <span className="text-[14px] w-5 text-center flex-shrink-0">{emoji}</span>
             {label}
           </Link>
