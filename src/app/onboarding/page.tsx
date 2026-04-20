@@ -34,17 +34,23 @@ export default function OnboardingPage() {
     supabase.auth.getUser().then(async ({ data: authData }) => {
       if (!authData.user) { router.push('/auth/login'); return }
       setUser(authData.user)
-      // If user already has personal info saved, pre-fill and skip step 4
-      const { data: prof } = await supabase
-        .from('profiles').select('user_gender, user_city, user_age, user_ethnicity').eq('id', authData.user.id).single()
-      if (prof && (prof.user_gender || prof.user_city)) {
+      // Check most recent goal for saved personal info (stored in goals, not profiles)
+      const { data: lastGoal } = await supabase
+        .from('goals')
+        .select('user_gender, user_city, user_age, user_ethnicity')
+        .eq('user_id', authData.user.id)
+        .not('user_gender', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (lastGoal && (lastGoal.user_gender || lastGoal.user_city)) {
         setProfileHasInfo(true)
         setData(d => ({
           ...d,
-          gender: prof.user_gender || '',
-          city: prof.user_city || '',
-          age: prof.user_age ? String(prof.user_age) : '',
-          ethnicity: prof.user_ethnicity || '',
+          gender: lastGoal.user_gender || '',
+          city: lastGoal.user_city || '',
+          age: lastGoal.user_age ? String(lastGoal.user_age) : '',
+          ethnicity: lastGoal.user_ethnicity || '',
         }))
       }
     })
@@ -139,7 +145,7 @@ export default function OnboardingPage() {
         </div>
         <div className="p-10">
 
-          {/* Step 0 â€” Goal */}
+          {/* Step 0 — Goal */}
           {step === 0 && (
             <div className="fade-up">
               <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 1 of 5</p>
@@ -160,7 +166,7 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 1 â€” Timeline */}
+          {/* Step 1 — Timeline */}
           {step === 1 && (
             <div className="fade-up">
               <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 2 of 5</p>
@@ -182,7 +188,7 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 2 â€” Why */}
+          {/* Step 2 — Why */}
           {step === 2 && (
             <div className="fade-up">
               <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 3 of 5</p>
@@ -199,7 +205,7 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 3 â€” Aesthetic */}
+          {/* Step 3 — Aesthetic */}
           {step === 3 && (
             <div className="fade-up">
               <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 4 of 5</p>
@@ -217,14 +223,14 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 4 â€” About you (gender + age for personalised vision art) */}
+          {/* Step 4 — About you (gender + age for personalised vision art) */}
           {step === 4 && (
             <div className="fade-up">
               <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Step 5 of 5</p>
               <h2 className="font-serif text-[28px] mb-1.5">About you</h2>
               <p className="text-[14px] text-[#666] mb-6 leading-[1.6]">{profileHasInfo ? "Your personal details are pre-filled — update if anything changed." : "Used to personalise your vision board imagery. Totally optional — skip anytime."}</p>
               <div className="mb-5">
-                <label className="block text-[12px] font-medium text-[#666] mb-2">Your city <span className="text-[#999] font-normal">(optional â€” makes your vision art location-specific)</span></label>
+                <label className="block text-[12px] font-medium text-[#666] mb-2">Your city <span className="text-[#999] font-normal">(optional — makes your vision art location-specific)</span></label>
                 <input
                   type="text"
                   value={data.city}
@@ -267,7 +273,7 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 5 â€” Result */}
+          {/* Step 5 — Result */}
           {step === 5 && (
             <div className="fade-up">
               {generating ? (
@@ -281,7 +287,7 @@ export default function OnboardingPage() {
                   <p className="text-[10px] font-medium tracking-[.14em] uppercase text-[#b8922a] mb-2">Your manifest is ready</p>
                   <h2 className="font-serif text-[26px] mb-5">Welcome, {user?.user_metadata?.full_name?.split(' ')[0] || 'friend'}.</h2>
                   <div className="rounded-2xl overflow-hidden mb-4 relative" style={{ background: aes?.bg || '#1a1a2e', minHeight: 140 }}>
-                    <div className="absolute inset-0 flex items-center justify-center font-serif text-[80px] opacity-[0.07]" style={{ color: aes?.fg }}>âœ¦</div>
+                    <div className="absolute inset-0 flex items-center justify-center font-serif text-[80px] opacity-[0.07]" style={{ color: aes?.fg }}>✦</div>
                     <div className="relative z-10 p-6">
                       <p className="font-serif italic text-[20px] mb-1.5" style={{ color: aes?.fg }}>{result.artTitle}</p>
                       <p className="text-[12px] leading-[1.6]" style={{ color: aes?.bg === '#e8e5de' ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.5)' }}>{result.artDescription}</p>
@@ -320,7 +326,7 @@ export default function OnboardingPage() {
                 <button onClick={()=>setStep(s=>s-1)} className="px-4 py-2 text-[13px] font-medium border border-[#e8e8e8] rounded-lg hover:bg-[#f8f7f5] transition-colors">← Back</button>
               ) : <div/>}
               <button onClick={next} className="px-5 py-2.5 bg-[#111] text-white rounded-lg text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">
-                {step === 4 ? 'Create my manifest âœ¦' : 'Continue →'}
+                {step === 4 ? 'Create my manifest ✦' : 'Continue →'}
               </button>
             </div>
           )}
