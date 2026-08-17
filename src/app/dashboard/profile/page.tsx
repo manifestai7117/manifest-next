@@ -43,10 +43,6 @@ export default function ProfileFeedbackPage() {
   const [showCancelFlow, setShowCancelFlow] = useState(false)
   const [cancelStep, setCancelStep] = useState(0)
   const [cancelReason, setCancelReason] = useState('')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleteStep, setDeleteStep] = useState(0)
-  const [deleteConfirmText, setDeleteConfirmText] = useState('')
-  const [deletingAccount, setDeletingAccount] = useState(false)
   const DAILY_LIMIT = 5
 
   useEffect(() => {
@@ -90,17 +86,23 @@ export default function ProfileFeedbackPage() {
     if (!user || uploadingAvatar) return
     setUploadingAvatar(true)
     try {
-      const ext = file.name.split('.').pop()
-      const path = `${user.id}/avatar.${ext}`
-      const { error: uploadErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type })
+      const ext = file.name.split('.').pop() || 'jpg'
+      // Use timestamp in filename so browser never serves a cached old photo
+      const path = `${user.id}/avatar-${Date.now()}.${ext}`
+      const { error: uploadErr } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: false, contentType: file.type })
       if (uploadErr) throw uploadErr
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-      const { error: updateErr } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
+      const { error: updateErr } = await supabase.from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id)
       if (updateErr) throw updateErr
-      setProfile((p: any) => ({ ...p, avatar_url: publicUrl }))
+      // Force React to re-render with new URL immediately
+      setProfile((p: any) => ({ ...p, avatar_url: publicUrl + '?t=' + Date.now() }))
       toast.success('Profile photo updated!')
     } catch (e: any) {
-      toast.error(e.message || 'Upload failed')
+      toast.error(e.message || 'Upload failed — make sure the avatars bucket is public in Supabase Storage')
     }
     setUploadingAvatar(false)
   }
@@ -163,10 +165,10 @@ export default function ProfileFeedbackPage() {
           </div>
           <h1 className="font-serif text-[24px] mb-0.5">{profile?.full_name}</h1>
           <p className="text-[13px] text-[#999] mb-4">{user?.email}</p>
-          <div className="grid grid-cols-5 gap-2">
-            {[{ val: activeGoals.length, l: 'Active' }, { val: completedGoals.length, l: 'Completed' }, { val: `${totalStreak}🔥`, l: 'Streak' }, { val: postCount, l: 'Posts' }, { val: totalCheckins, l: 'Check-ins' }].map(({ val, l }) => (
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+            {[{ val: activeGoals.length, l: 'Goals' }, { val: completedGoals.length, l: 'Done' }, { val: `${totalStreak}🔥`, l: 'Streak' }, { val: postCount, l: 'Posts' }, { val: totalCheckins, l: 'Check-ins' }].map(({ val, l }) => (
               <div key={l} className="bg-[#f8f7f5] rounded-xl p-3 text-center">
-                <p className="font-serif text-[18px] leading-none mb-0.5">{val}</p>
+                <p className="font-serif text-[16px] leading-none mb-0.5">{val}</p>
                 <p className="text-[9px] text-[#999] uppercase tracking-[.04em]">{l}</p>
               </div>
             ))}
@@ -245,7 +247,7 @@ export default function ProfileFeedbackPage() {
         </div>
       </div>
 
-      {/* FEEDBACK SECTION */}
+      {/* ── FEEDBACK SECTION ── */}
       <div className="mt-6 mb-2">
         <h2 className="font-serif text-[24px] mb-1">Feedback & Reviews</h2>
         <p className="text-[13px] text-[#999] mb-4">Every message is read by the team.</p>
@@ -312,12 +314,7 @@ export default function ProfileFeedbackPage() {
               {(cancelReason === 'Switching to another app' || cancelReason === 'Other') && <p className="text-[13px] text-[#111] mb-3">We're sorry to see you go. Your streak, goals, and data will be preserved if you ever come back.</p>}
               <div className="flex gap-2">
                 <button onClick={() => { setShowCancelFlow(false); setCancelStep(0); toast('Glad you\'re staying! 🎉') }} className="flex-1 py-2 bg-[#111] text-white rounded-xl text-[12px] font-medium">Keep Pro</button>
-                <button onClick={() => { (async () => {
-                      await supabase.from('profiles').update({ plan: 'free' }).eq('id', user.id)
-                      setProfile((p: any) => ({ ...p, plan: 'free' }))
-                      setShowCancelFlow(false); setCancelStep(0)
-                      toast.success('Subscription cancelled. You are now on the free plan.')
-                    })() }} className="flex-1 py-2 border border-red-200 text-red-500 rounded-xl text-[12px]">Cancel anyway</button>
+                <button onClick={() => { toast.error('To cancel, go to your Stripe customer portal or email support@manifest.app'); setShowCancelFlow(false); setCancelStep(0) }} className="flex-1 py-2 border border-red-200 text-red-500 rounded-xl text-[12px]">Cancel anyway</button>
               </div>
             </div>
           )}
@@ -326,47 +323,8 @@ export default function ProfileFeedbackPage() {
 
       {/* Danger zone */}
       <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5">
-        <p className="font-medium text-[14px] mb-3 text-red-500">Danger zone</p>
-        {!showDeleteConfirm ? (
-          <button onClick={() => setShowDeleteConfirm(true)} className="px-4 py-2 border border-red-200 text-red-500 rounded-xl text-[13px] hover:bg-red-50 transition-colors">
-            Delete my account
-          </button>
-        ) : deleteStep === 0 ? (
-          <div className="space-y-3">
-            <p className="text-[13px] font-medium text-[#111]">Are you sure?</p>
-            <p className="text-[12px] text-[#999]">This permanently deletes all your goals, streaks, check-ins, and posts. This cannot be undone.</p>
-            <div className="flex gap-2">
-              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
-              <button onClick={() => setDeleteStep(1)} className="flex-1 py-2 bg-red-500 text-white rounded-xl text-[13px] font-medium">Yes, delete</button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-[13px] font-medium text-[#111]">Type DELETE to confirm</p>
-            <input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)}
-              placeholder="Type DELETE" className="w-full px-3.5 py-2.5 border border-red-200 rounded-xl text-[13px] outline-none focus:border-red-400"/>
-            <div className="flex gap-2">
-              <button onClick={() => { setShowDeleteConfirm(false); setDeleteStep(0); setDeleteConfirmText('') }} className="flex-1 py-2 border border-[#e8e8e8] rounded-xl text-[13px]">Cancel</button>
-              <button
-                disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
-                onClick={async () => {
-                  setDeletingAccount(true)
-                  try {
-                    const res = await fetch('/api/delete-account', { method: 'POST' })
-                    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed') }
-                    await supabase.auth.signOut()
-                    router.push('/')
-                  } catch {
-                    toast.error('Deletion failed — please try again')
-                    setDeletingAccount(false)
-                  }
-                }}
-                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-[13px] font-medium disabled:opacity-40">
-                {deletingAccount ? 'Deleting...' : 'Delete forever'}
-              </button>
-            </div>
-          </div>
-        )}
+        <p className="font-medium text-[14px] mb-2 text-red-500">Danger zone</p>
+        <p className="text-[12px] text-[#999] mb-2">To delete your account, email <a href="mailto:support@manifest.app" className="text-[#b8922a] underline">support@manifest.app</a></p>
       </div>
     </div>
   )
