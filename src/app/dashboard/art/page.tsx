@@ -15,17 +15,14 @@ export default function VisionArtPage() {
   const [goals, setGoals] = useState<any[]>([])
   const [selectedGoal, setSelectedGoal] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
-  const [visionImage, setVisionImage] = useState<{ label: string; description: string; imageUrl: string } | null>(null)
+  const [options, setOptions] = useState<any[]>([])
+  const [chosenIdx, setChosenIdx] = useState<number | null>(null)
   const [generating, setGenerating] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'art'|'print'>('art')
-  const [printOrdered, setPrintOrdered] = useState<string[]>([])
   const [emailSent, setEmailSent] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
-  const [shared, setShared] = useState(false)
-  const [sharing, setSharing] = useState(false)
-  const [showShareModal, setShowShareModal] = useState(false)
-  const [shareCaption, setShareCaption] = useState('')
+  const [tab, setTab] = useState<'art'|'print'>('art')
+  const [printOrdered, setPrintOrdered] = useState<string[]>([])
 
   useEffect(() => {
     const load = async () => {
@@ -40,102 +37,102 @@ export default function VisionArtPage() {
       const savedId = localStorage.getItem('selectedGoalId')
       const g = gs?.find((x: any) => x.id === savedId) || gs?.[0] || null
       setSelectedGoal(g)
-      if (g) loadSavedVision(g)
+      if (g) {
+        const cached = localStorage.getItem(`vb_options_${g.id}`)
+        if (cached) try {
+          const p = JSON.parse(cached)
+          const age = Date.now() - (p.generatedAt || 0)
+          // Only restore cache if less than 24 hours old
+          if (age < 86400000) {
+            setOptions(p.options || [])
+            setChosenIdx(p.chosen ?? null)
+          } else {
+            localStorage.removeItem(`vb_options_${g.id}`)
+          }
+        } catch {}
+      }
       setLoading(false)
     }
     load()
   }, [])
 
-  const openShareModal = () => {
-    if (shared) return
-    setShareCaption(`My vision for "${selectedGoal.title}" ✦`)
-    setShowShareModal(true)
-  }
-
-  const submitShare = async () => {
-    if (!visionImage || sharing || shared) return
-    setSharing(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      await supabase.from('feed_posts').insert({
-        user_id: user.id,
-        content: shareCaption.trim() || `My vision for "${selectedGoal.title}" ✦`,
-        post_type: 'milestone',
-        visibility: 'public',
-        media_url: visionImage.imageUrl,
-        media_type: 'image',
-        goal_id: selectedGoal.id,
-        goal_title: selectedGoal.title,
-      })
-      setShared(true)
-      setShowShareModal(false)
-      toast.success('Shared to your feed! 🔥')
-    } catch {
-      toast.error('Could not share — try again')
-    }
-    setSharing(false)
-  }
-
-  const loadSavedVision = (g: any) => {
-    if (g.vision_options) {
-      try {
-        const saved = JSON.parse(g.vision_options)
-        if (Array.isArray(saved) && saved[0]?.imageUrl) {
-          setVisionImage(saved[0])
-          return
-        }
-      } catch {}
-    }
-    // Fall back to art_image_url
-    if (g.art_image_url) {
-      setVisionImage({ label: g.art_title || 'Your Vision', description: g.title, imageUrl: g.art_image_url })
-    }
-  }
-
   const selectGoal = (g: any) => {
     setSelectedGoal(g)
-    setVisionImage(null)
-    setEmailSent(false)
-    loadSavedVision(g)
+    setOptions([]); setChosenIdx(null); setEmailSent(false)
+    const cached = localStorage.getItem(`vb_options_${g.id}`)
+    if (cached) try {
+      const p = JSON.parse(cached)
+      const age = Date.now() - (p.generatedAt || 0)
+      if (age < 86400000) {
+        setOptions(p.options || [])
+        setChosenIdx(p.chosen ?? null)
+      } else {
+        localStorage.removeItem(`vb_options_${g.id}`)
+      }
+    } catch {}
     localStorage.setItem('selectedGoalId', g.id)
   }
 
   const generate = async () => {
     if (!selectedGoal || generating) return
+    // Always clear cache before generating so we never show stale results
+    localStorage.removeItem(`vb_options_${selectedGoal.id}`)
     setGenerating(true)
-    setVisionImage(null)
-
-    const res = await fetch('/api/vision-art/options', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goalId: selectedGoal.id }),
-    })
-    const data = await res.json()
-
-    if (res.ok && data.options?.[0]?.imageUrl) {
-      setVisionImage(data.options[0])
-      setSelectedGoal((prev: any) => ({ ...prev, vision_options: JSON.stringify(data.options), art_image_url: data.options[0].imageUrl, art_title: data.options[0].label }))
-      setGoals(prev => prev.map(g => g.id === selectedGoal.id ? { ...g, art_image_url: data.options[0].imageUrl, art_title: data.options[0].label } : g))
-      toast.success('Your vision is ready!')
-    } else {
-      toast.error(data.error || 'Generation failed — please try again')
+    setOptions([])
+    setChosenIdx(null)
+    try {
+      const res = await fetch('/api/vision-art/options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goalId: selectedGoal.id }),
+      })
+      const data = await res.json()
+      if (res.ok && data.options?.length > 0) {
+        setOptions(data.options)
+        // Only cache AFTER successful generation with unique results
+        localStorage.setItem(`vb_options_${selectedGoal.id}`, JSON.stringify({
+          options: data.options,
+          chosen: null,
+          generatedAt: Date.now(),
+        }))
+        toast.success(`${data.options.length} vision options ready!`)
+      } else {
+        toast.error(data.error || 'Generation failed — try again')
+      }
+    } catch (e) {
+      toast.error('Request failed — check your connection')
     }
     setGenerating(false)
+  }
+
+  const chooseOption = async (idx: number) => {
+    if (!selectedGoal) return
+    const chosen = options[idx]
+    if (!chosen?.imageUrl) return
+    setChosenIdx(idx)
+    const newCount = (selectedGoal.vision_board_regenerations || 0) + 1
+    await supabase.from('goals').update({ art_image_url: chosen.imageUrl, vision_board_regenerations: newCount }).eq('id', selectedGoal.id)
+    const updated = { ...selectedGoal, art_image_url: chosen.imageUrl, vision_board_regenerations: newCount }
+    setSelectedGoal(updated)
+    setGoals(prev => prev.map(g => g.id === selectedGoal.id ? updated : g))
+    localStorage.setItem(`vb_options_${selectedGoal.id}`, JSON.stringify({ options, chosen: idx }))
+    toast.success('Vision locked in!')
+  }
+
+  const sendEmail = async () => {
+    if (!profile?.email || chosenIdx === null || sendingEmail) return
+    const chosen = options[chosenIdx]
+    setSendingEmail(true)
+    await fetch('/api/email/vision-art', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: profile.email, imageUrl: chosen.imageUrl, goalTitle: selectedGoal?.title }) })
+    setEmailSent(true); setSendingEmail(false)
+    toast.success('Sent to your email!')
   }
 
   const download = () => {
     const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
     if (!isPro) { toast.error('Download is a Pro feature'); return }
-    if (visionImage?.imageUrl) window.open(visionImage.imageUrl, '_blank')
-  }
-
-  const sendEmail = async () => {
-    if (!profile?.email || !visionImage || sendingEmail) return
-    setSendingEmail(true)
-    await fetch('/api/email/vision-art', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: profile.email, imageUrl: visionImage.imageUrl, goalTitle: selectedGoal?.title }) })
-    setEmailSent(true); setSendingEmail(false)
-    toast.success('Sent to your email!')
+    const url = chosenIdx !== null ? options[chosenIdx]?.imageUrl : selectedGoal?.art_image_url
+    if (url) window.open(url, '_blank')
   }
 
   if (loading) return <div className="text-[#999] text-[14px]">Loading...</div>
@@ -148,101 +145,40 @@ export default function VisionArtPage() {
   )
 
   const isPro = profile?.plan === 'pro' || profile?.plan === 'pro_trial'
+  const hasChosen = chosenIdx !== null && options[chosenIdx]
+  const chosenImage = hasChosen ? options[chosenIdx] : null
 
   return (
-    <div className="fade-up max-w-[760px]">
-
-      {/* Share to feed modal */}
-      {showShareModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
-          <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-[480px] w-full shadow-2xl overflow-hidden">
-            {/* Preview */}
-            <div className="relative" style={{aspectRatio:'2/3',maxHeight:320}}>
-              <img src={visionImage?.imageUrl} alt="" className="w-full h-full object-cover"/>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"/>
-              <div className="absolute bottom-3 left-4 right-4">
-                <p className="font-serif italic text-white text-[16px]">{visionImage?.label}</p>
-              </div>
-            </div>
-            {/* Edit caption */}
-            <div className="p-5">
-              <label className="text-[11px] font-medium text-[#666] uppercase tracking-wide mb-2 block">Caption</label>
-              <textarea
-                value={shareCaption}
-                onChange={e => setShareCaption(e.target.value)}
-                rows={3}
-                maxLength={280}
-                className="w-full px-4 py-3 border border-[#e8e8e8] rounded-xl text-[14px] outline-none focus:border-[#b8922a] resize-none mb-1 transition-colors"
-                placeholder="Write something inspiring..."
-                autoFocus
-              />
-              <p className="text-[11px] text-[#bbb] text-right mb-4">{shareCaption.length}/280</p>
-              <div className="bg-[#f8f7f5] rounded-xl p-3 mb-4 flex items-center gap-2">
-                <span className="text-[16px]">🌍</span>
-                <p className="text-[12px] text-[#666]">Posted publicly — friends and everyone can see this</p>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowShareModal(false)} className="flex-1 py-2.5 border border-[#e8e8e8] rounded-xl text-[13px] hover:bg-[#f8f7f5] transition-colors">Cancel</button>
-                <button onClick={submitShare} disabled={sharing}
-                  className="flex-1 py-2.5 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium hover:bg-[#9a7820] disabled:opacity-50 transition-colors">
-                  {sharing ? 'Sharing...' : 'Share to feed ✦'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="fade-up max-w-[960px]">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
+      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
-          <h1 className="font-serif text-[32px] mb-1">Vision Art</h1>
-          <p className="text-[14px] text-[#666]">
-            {selectedGoal.user_city ? `Personalised for ${selectedGoal.user_city}` : 'AI-generated art for your goal'}
-          </p>
+          <h1 className="font-serif text-[32px] mb-1">Vision Art & Print Shop</h1>
+          <p className="text-[14px] text-[#666]">{selectedGoal.user_city ? `Personalised for you in ${selectedGoal.user_city}` : 'AI-generated art for your goal'}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {visionImage && isPro && (
-            <button onClick={download} className="flex items-center gap-2 px-4 py-2.5 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5]">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download
-            </button>
-          )}
-          {visionImage && !emailSent && (
-            <button onClick={sendEmail} disabled={sendingEmail} className="flex items-center gap-2 px-4 py-2.5 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] disabled:opacity-50">
-              {sendingEmail ? 'Sending...' : '✉ Email to me'}
-            </button>
-          )}
+          {hasChosen && isPro && <button onClick={download} className="flex items-center gap-2 px-4 py-2.5 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5]"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download</button>}
+          {hasChosen && !emailSent && <button onClick={sendEmail} disabled={sendingEmail} className="flex items-center gap-2 px-4 py-2.5 border border-[#e8e8e8] bg-white rounded-xl text-[13px] font-medium hover:bg-[#f8f7f5] disabled:opacity-50">{sendingEmail ? 'Sending...' : '✉ Email to me'}</button>}
           {emailSent && <span className="px-4 py-2.5 text-[13px] text-green-600 font-medium">✓ Sent!</span>}
-          {visionImage && !shared && (
-            <button onClick={openShareModal} disabled={sharing}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#b8922a] text-white rounded-xl text-[13px] font-medium hover:bg-[#9a7820] disabled:opacity-50 transition-colors">
-              {sharing ? 'Sharing...' : '↑ Share to feed'}
-            </button>
-          )}
-          {shared && <span className="px-4 py-2.5 text-[13px] text-green-600 font-medium">✓ Shared!</span>}
-          <button onClick={generate} disabled={generating}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50 transition-colors">
-            {generating
-              ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full spin-anim"/>Creating your vision...</>
-              : visionImage ? '↺ Regenerate' : '✦ Generate vision art'}
+          <button onClick={generate} disabled={generating} className="flex items-center gap-2 px-4 py-2.5 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] disabled:opacity-50">
+            {generating ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full spin-anim"/>Generating...</> : options.length > 0 ? 'Regenerate ↺' : '✦ Generate vision art'}
           </button>
         </div>
       </div>
 
-      {/* Goal selector */}
+      {/* Goal tabs */}
       {goals.length > 1 && (
-        <div className="flex gap-2 mb-6 flex-wrap">
+        <div className="flex gap-2 mb-5 flex-wrap">
           {goals.map(g => (
-            <button key={g.id} onClick={() => selectGoal(g)}
-              className={`px-4 py-2 rounded-full text-[13px] border transition-all ${selectedGoal?.id === g.id ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#666] border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>
+            <button key={g.id} onClick={() => selectGoal(g)} className={`px-4 py-2 rounded-full text-[13px] border transition-all ${selectedGoal?.id === g.id ? 'bg-[#111] text-white border-[#111]' : 'bg-white text-[#666] border-[#e8e8e8] hover:border-[#d0d0d0]'}`}>
               {g.title.slice(0, 30)}{g.title.length > 30 ? '…' : ''}
             </button>
           ))}
         </div>
       )}
 
-      {/* Art / Print tabs */}
-      <div className="flex gap-1 p-1 bg-[#f2f0ec] rounded-xl mb-6 w-fit">
+      {/* Tabs: Art / Print */}
+      <div className="flex gap-1 p-1 bg-[#f2f0ec] rounded-xl mb-5 w-fit">
         <button onClick={() => setTab('art')} className={`px-5 py-2 rounded-lg text-[13px] font-medium transition-all ${tab === 'art' ? 'bg-white shadow-sm text-[#111]' : 'text-[#666]'}`}>✦ Vision Art</button>
         <button onClick={() => setTab('print')} className={`px-5 py-2 rounded-lg text-[13px] font-medium transition-all ${tab === 'print' ? 'bg-white shadow-sm text-[#111]' : 'text-[#666]'}`}>🖼 Print Shop</button>
       </div>
@@ -250,91 +186,78 @@ export default function VisionArtPage() {
       {/* ART TAB */}
       {tab === 'art' && (
         <>
-          {/* Generating state */}
           {generating && (
-            <div className="rounded-2xl bg-gradient-to-br from-[#0d1117] to-[#1a2332] p-16 text-center mb-6">
+            <div className="rounded-2xl bg-gradient-to-br from-[#0d1117] to-[#1a2332] p-12 text-center mb-6">
               <div className="w-12 h-12 border-2 border-white/10 border-t-[#b8922a] rounded-full spin-anim mx-auto mb-6"/>
-              <p className="font-serif italic text-white/60 text-[22px] mb-3">Creating your vision...</p>
-              <p className="text-white/30 text-[13px] max-w-[300px] mx-auto leading-[1.7]">
-                Writing your scene, then generating a photorealistic image
-              </p>
+              <p className="font-serif italic text-white/60 text-[20px] mb-3">Creating 3 personalised visions...</p>
+              <p className="text-white/30 text-[13px] max-w-[320px] mx-auto leading-[1.7]">Claude is writing scene concepts for your goal, then generating each image</p>
             </div>
           )}
 
-          {/* Vision image */}
-          {!generating && visionImage && (
-            <div className="mb-6">
-              {/* Full portrait image */}
-              <div className="rounded-2xl overflow-hidden shadow-2xl mb-4" style={{ aspectRatio: '2/3', maxWidth: 420, margin: '0 auto 16px' }}>
-                <img
-                  src={visionImage.imageUrl}
-                  alt={visionImage.label}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement
-                    target.style.display = 'none'
-                    const parent = target.parentElement
-                    if (parent) {
-                      parent.innerHTML = '<div class="w-full h-full bg-[#1a1a2e] flex flex-col items-center justify-center gap-3"><p class="text-white/40 text-[15px]">Image unavailable</p><button onclick="window.location.reload()" class="text-[#b8922a] text-[13px] underline">Regenerate</button></div>'
-                    }
-                  }}
-                />
+          {!generating && options.length > 0 && (
+            <>
+              {/* Separator */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-px flex-1 bg-[#e8e8e8]"/>
+                <p className="text-[11px] font-bold tracking-[.14em] uppercase text-[#999]">{chosenIdx === null ? '✦ Choose your vision' : '✦ Suggested visions'}</p>
+                <div className="h-px flex-1 bg-[#e8e8e8]"/>
               </div>
 
-              {/* Vision info card */}
-              <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5 max-w-[420px] mx-auto">
-                <p className="font-serif italic text-[20px] mb-2">{visionImage.label}</p>
-                <p className="text-[13px] text-[#666] leading-[1.6] mb-4">{visionImage.description}</p>
-                {selectedGoal.affirmation && (
-                  <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-xl p-3.5">
-                    <p className="text-[10px] font-bold tracking-[.12em] uppercase text-[#b8922a] mb-1">Daily affirmation</p>
-                    <p className="font-serif italic text-[14px] text-[#111] leading-[1.6]">"{selectedGoal.affirmation}"</p>
+              <div className={`grid gap-4 mb-6 ${options.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                {options.map((opt, i) => (
+                  <div key={i} onClick={() => chooseOption(i)}
+                    className={`rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${chosenIdx === i ? 'ring-4 ring-[#b8922a] shadow-2xl scale-[1.02]' : chosenIdx !== null ? 'opacity-40 hover:opacity-60' : 'hover:shadow-xl hover:scale-[1.01]'}`}>
+                    <div className="relative" style={{ aspectRatio: '3/4' }}>
+                      {opt.imageUrl ? <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-[#f0ede8] flex items-center justify-center"><p className="text-[#999] text-[13px]">Unavailable</p></div>}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4">
+                        <p className="font-serif italic text-white text-[16px] leading-tight">{opt.label}</p>
+                        <p className="text-white/50 text-[11px] mt-1">{opt.description}</p>
+                      </div>
+                      {chosenIdx === i && <div className="absolute top-3 right-3 bg-[#b8922a] text-white text-[11px] font-bold px-3 py-1.5 rounded-full">✓ Selected</div>}
+                      {chosenIdx === null && <div className="absolute top-3 left-3 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white text-[13px] font-bold">{String.fromCharCode(65 + i)}</div>}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
 
-              {/* Share + print CTAs */}
-              <div className="mt-4 max-w-[420px] mx-auto space-y-2">
-                {!shared ? (
-                  <div className="bg-[#111] rounded-2xl p-4 flex items-center gap-4">
-                    <div className="flex-1">
-                      <p className="text-white text-[13px] font-medium mb-0.5">Inspire your friends</p>
-                      <p className="text-white/50 text-[11px]">Share your vision to your feed — let others see what you're working toward</p>
-                    </div>
-                    <button onClick={openShareModal} disabled={sharing}
-                      className="flex-shrink-0 px-4 py-2 bg-[#b8922a] text-white rounded-xl text-[12px] font-medium hover:bg-[#9a7820] disabled:opacity-50 transition-colors">
-                      {sharing ? '...' : 'Share'}
-                    </button>
+              {/* Chosen art detail */}
+              {chosenImage && (
+                <>
+                  <div className="flex items-center gap-3 my-5">
+                    <div className="h-px flex-1 bg-[#e8e8e8]"/>
+                    <p className="text-[11px] font-bold tracking-[.14em] uppercase text-[#b8922a]">✦ Your chosen vision</p>
+                    <div className="h-px flex-1 bg-[#e8e8e8]"/>
                   </div>
-                ) : (
-                  <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3">
-                    <span className="text-[20px]">🔥</span>
-                    <div>
-                      <p className="text-green-700 text-[13px] font-medium">Shared to your feed!</p>
-                      <p className="text-green-600/70 text-[11px]">Your vision is inspiring others</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="rounded-2xl overflow-hidden shadow-2xl" style={{ aspectRatio: '4/5' }}>
+                      <img src={chosenImage.imageUrl} alt={chosenImage.label} className="w-full h-full object-cover"/>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="bg-white border border-[#e8e8e8] rounded-2xl p-5">
+                        <p className="text-[10px] font-medium tracking-[.12em] uppercase text-[#b8922a] mb-2">Your chosen vision</p>
+                        <p className="font-serif italic text-[22px] leading-tight mb-2">{chosenImage.label}</p>
+                        <p className="text-[13px] text-[#666] leading-[1.65]">{chosenImage.description}</p>
+                      </div>
+                      <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-2xl p-5">
+                        <p className="text-[10px] font-medium tracking-[.12em] uppercase text-[#b8922a] mb-2">Daily affirmation</p>
+                        <p className="font-serif italic text-[15px] text-[#111] leading-[1.65]">"{selectedGoal.affirmation}"</p>
+                      </div>
+                      <button onClick={() => setTab('print')} className="w-full py-3 border-2 border-dashed border-[#b8922a]/40 text-[#b8922a] text-[13px] font-medium rounded-2xl hover:border-[#b8922a] transition-colors">
+                        🖼 Order a print of this →
+                      </button>
                     </div>
                   </div>
-                )}
-                <button onClick={() => setTab('print')}
-                  className="w-full py-3 border-2 border-dashed border-[#b8922a]/40 text-[#b8922a] text-[13px] font-medium rounded-2xl hover:border-[#b8922a] transition-colors">
-                  🖼 Order a print of this →
-                </button>
-              </div>
-            </div>
+                </>
+              )}
+            </>
           )}
 
-          {/* Empty state */}
-          {!generating && !visionImage && (
+          {!generating && options.length === 0 && (
             <div className="rounded-2xl border-2 border-dashed border-[#e8e8e8] p-16 text-center">
               <p className="text-[48px] mb-4">✦</p>
-              <p className="font-serif text-[22px] mb-2">Your vision awaits</p>
-              <p className="text-[13px] text-[#999] max-w-[280px] mx-auto mb-6 leading-[1.7]">
-                Generate a personalised photorealistic vision of you having achieved your goal
-              </p>
-              <button onClick={generate}
-                className="px-6 py-3 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">
-                ✦ Generate my vision art
-              </button>
+              <p className="font-serif text-[20px] mb-2">Your vision awaits</p>
+              <p className="text-[13px] text-[#999] max-w-[280px] mx-auto mb-6 leading-[1.7]">Generate 3 personalised AI images for your goal — choose the one that calls to you</p>
+              <button onClick={generate} disabled={generating} className="px-6 py-3 bg-[#111] text-white rounded-xl text-[13px] font-medium hover:bg-[#2a2a2a] transition-colors">✦ Generate my vision art</button>
             </div>
           )}
         </>
@@ -343,23 +266,24 @@ export default function VisionArtPage() {
       {/* PRINT TAB */}
       {tab === 'print' && (
         <div>
-          {!visionImage && (
+          {!selectedGoal?.art_image_url && !hasChosen && (
             <div className="bg-[#faf3e0] border border-[#b8922a]/20 rounded-2xl p-4 mb-5 flex items-center gap-3">
               <span className="text-[20px]">✦</span>
               <div>
                 <p className="text-[13px] font-medium text-[#b8922a]">Generate your vision art first</p>
-                <p className="text-[12px] text-[#999]">Create your image from the Art tab, then order a print</p>
+                <p className="text-[12px] text-[#999]">Choose a vision from the Art tab, then order a print</p>
               </div>
               <button onClick={() => setTab('art')} className="ml-auto px-3 py-1.5 bg-[#b8922a] text-white rounded-xl text-[12px] font-medium flex-shrink-0">Create art →</button>
             </div>
           )}
 
-          {visionImage && (
+          {(selectedGoal?.art_image_url || hasChosen) && (
             <div className="flex items-start gap-4 bg-[#111] rounded-2xl p-4 mb-5">
-              <img src={visionImage.imageUrl} alt="" className="w-16 h-24 object-cover rounded-xl flex-shrink-0"/>
+              <img src={hasChosen ? options[chosenIdx!]?.imageUrl : selectedGoal.art_image_url} alt="" className="w-20 h-24 object-cover rounded-xl flex-shrink-0"/>
               <div>
                 <p className="text-[11px] text-white/40 uppercase tracking-[.1em] mb-1">Printing this vision</p>
-                <p className="font-serif italic text-white text-[16px]">{visionImage.label}</p>
+                <p className="font-serif italic text-white text-[16px]">{hasChosen ? options[chosenIdx!]?.label : selectedGoal.art_title || selectedGoal.title}</p>
+                <p className="text-[12px] text-white/40 mt-1">{selectedGoal.title}</p>
               </div>
             </div>
           )}
@@ -368,18 +292,25 @@ export default function VisionArtPage() {
             {PRINT_PRODUCTS.map(p => (
               <div key={p.type} className={`bg-white rounded-2xl p-6 text-center relative ${p.featured ? 'border-2 border-[#111]' : 'border border-[#e8e8e8]'}`}>
                 {p.featured && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#111] text-white text-[10px] font-medium px-3 py-1 rounded-full whitespace-nowrap">Most popular</div>}
-                <div className="w-12 h-16 bg-[#1a1a2e] rounded-lg mx-auto mb-4 flex items-center justify-center text-white/20 font-serif text-[18px]">✦</div>
+                <div className="w-12 h-16 bg-[#1a1a2e] rounded-lg mx-auto mb-4 flex items-center justify-center text-[18px] text-white/20 font-serif">✦</div>
                 <p className="font-medium text-[16px] mb-0.5">{p.type}</p>
                 <p className="text-[13px] text-[#999] mb-1">{p.size}</p>
                 <p className="text-[12px] text-[#999] mb-4 leading-[1.5]">{p.desc}</p>
                 <p className="font-serif text-[36px] mb-4">{p.price}</p>
-                <button onClick={() => { setPrintOrdered(prev => [...prev, p.type]); toast.success(`${p.type} ordered!`) }}
+                <button onClick={() => { setPrintOrdered(prev => [...prev, p.type]); toast.success(`${p.type} ordered! Stripe integration connects your Printful account for fulfillment.`) }}
                   disabled={printOrdered.includes(p.type)}
                   className={`w-full py-2.5 rounded-xl text-[13px] font-medium transition-colors ${printOrdered.includes(p.type) ? 'bg-green-50 text-green-700 border border-green-200' : p.featured ? 'bg-[#111] text-white hover:bg-[#2a2a2a]' : 'border border-[#d0d0d0] hover:bg-[#f8f7f5]'}`}>
                   {printOrdered.includes(p.type) ? '✓ Ordered!' : 'Order now'}
                 </button>
               </div>
             ))}
+          </div>
+          <div className="bg-[#f8f7f5] border border-[#e8e8e8] rounded-2xl p-5 flex gap-4 items-start">
+            <span className="text-[20px]">🌟</span>
+            <div>
+              <p className="font-medium text-[14px] mb-1">Automated print fulfillment</p>
+              <p className="text-[13px] text-[#666] leading-[1.65]">Connect Printful or Gelato to your Stripe checkout. When someone orders, the print is produced and shipped automatically.</p>
+            </div>
           </div>
         </div>
       )}
