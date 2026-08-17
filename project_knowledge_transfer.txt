@@ -1463,7 +1463,7 @@ export async function POST(request: Request) {
     if (isSystem) {
       const ctx = (content || '').replace('[SYSTEM:', '').replace(']', '').trim()
       const ai = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001', max_tokens: 200,
+        model: 'claude-haiku-4-5', max_tokens: 200,
         system: `You are the coach for "${circle.name}" (${circle.goal_description}). Be warm, brief, no markdown.`,
         messages: [{ role: 'user', content: ctx }],
       })
@@ -1513,7 +1513,7 @@ export async function POST(request: Request) {
 
         if (shouldRespond) {
           const aiRes = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001', max_tokens: 150,
+            model: 'claude-haiku-4-5', max_tokens: 150,
             system: `You are the AI coach for "${circle.name}" (${circle.goal_description}). 1-2 sentences, no markdown, use their name.`,
             messages: history.slice(-6).map((m: any) => ({
               role: (m.is_ai ? 'assistant' : 'user') as 'user' | 'assistant',
@@ -1563,7 +1563,7 @@ export async function POST(request: Request) {
     if (!name || !goal || !category) return NextResponse.json({ error: 'Missing fields', approved: false }, { status: 400 })
 
     const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 200,
       system: `You review accountability group circle proposals. Return ONLY raw JSON: {"approved": true/false, "reason": "brief explanation"}.
       
@@ -1756,7 +1756,7 @@ FORMAT RULES — CRITICAL:
 - Sound like a real person, not an AI assistant`
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 600,
       system: systemPrompt,
       messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
@@ -1775,7 +1775,7 @@ FORMAT RULES — CRITICAL:
     if (goalId && goal && (count || 0) > 0 && (count || 0) % 10 === 0) {
       try {
         const summaryRes = await anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
+          model: 'claude-haiku-4-5',
           max_tokens: 200,
           messages: [{
             role: 'user',
@@ -1904,7 +1904,7 @@ export async function GET(request: Request) {
     try {
       const avgMood = (checkins.reduce((a: number, c: any) => a + c.mood, 0) / checkins.length).toFixed(1)
       const res = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001', max_tokens: 80,
+        model: 'claude-haiku-4-5', max_tokens: 80,
         messages: [{ role: 'user', content: `Goal: "${goal.title}". Progress: ${goal.progress}%. Streak: ${goal.streak} days. Avg mood last ${checkins.length} days: ${avgMood}/5. Write 1 specific insight in 1-2 sentences. Be direct and actionable. No generic advice.` }]
       })
       const insight = res.content[0].type === 'text' ? res.content[0].text.trim() : ''
@@ -2468,7 +2468,7 @@ export async function POST(request: Request) {
   try {
     const { rewardTitle, rewardEmoji, goalTitle, rewardDescription } = await request.json()
     const res = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 120,
       messages: [{
         role: 'user',
@@ -2502,7 +2502,7 @@ export async function POST(request: Request) {
     }
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1200,
       system: `You are Manifest's AI goal engine. Return ONLY a raw JSON object — no markdown, no backticks, no extra text.
 
@@ -2655,7 +2655,7 @@ STRICT FORMAT RULES:
 - Sound like a direct, caring coach — not a report`
 
   const res = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 180,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -2699,7 +2699,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024  // 50MB
 async function moderateImage(base64Data: string, mimeType: string): Promise<{ safe: boolean; reason?: string }> {
   try {
     const res = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 80,
       messages: [{
         role: 'user',
@@ -2819,7 +2819,7 @@ export async function POST(request: Request) {
     if (!text?.trim()) return NextResponse.json({ safe: true })
 
     const res = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 50,
       messages: [{
         role: 'user',
@@ -3023,7 +3023,7 @@ async function buildPrompt(goal: any): Promise<string> {
   const styleDesc = styleMap[aesthetic] || styleMap['Bright & energetic']
 
   const sceneRes = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 250,
     messages: [{
       role: 'user',
@@ -3367,7 +3367,7 @@ Output ONLY the image generation prompt, nothing else.`,
 
     // Build a label and description from the goal
     const labelRes = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 60,
       messages: [{
         role: 'user',
@@ -3427,7 +3427,7 @@ Rules:
 Example for "Become a 4.5 tennis player": ["tennis court aerial view","tennis racket yellow ball","clay tennis court lines","tennis net close up","tennis ball machine practice","outdoor tennis court sunset"]`
 
   const res = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 200,
     messages: [{ role: 'user', content: prompt }]
   })
@@ -3443,7 +3443,7 @@ Example for "Become a 4.5 tennis player": ["tennis court aerial view","tennis ra
 // Score an image for relevance to the goal
 async function scoreImage(imageDescription: string, goalTitle: string, query: string): Promise<number> {
   const res = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 10,
     messages: [{
       role: 'user',

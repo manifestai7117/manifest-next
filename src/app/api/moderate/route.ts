@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     if (!text?.trim()) return NextResponse.json({ safe: true })
 
     const res = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 50,
       messages: [{
         role: 'user',

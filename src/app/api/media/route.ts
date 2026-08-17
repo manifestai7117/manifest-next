@@ -19,7 +19,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024  // 50MB
 async function moderateImage(base64Data: string, mimeType: string): Promise<{ safe: boolean; reason?: string }> {
   try {
     const res = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 80,
       messages: [{
         role: 'user',

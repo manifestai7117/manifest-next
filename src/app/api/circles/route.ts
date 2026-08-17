@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     if (isSystem) {
       const ctx = (content || '').replace('[SYSTEM:', '').replace(']', '').trim()
       const ai = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001', max_tokens: 200,
+        model: 'claude-haiku-4-5', max_tokens: 200,
         system: `You are the coach for "${circle.name}" (${circle.goal_description}). Be warm, brief, no markdown.`,
         messages: [{ role: 'user', content: ctx }],
       })
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
 
         if (shouldRespond) {
           const aiRes = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001', max_tokens: 150,
+            model: 'claude-haiku-4-5', max_tokens: 150,
             system: `You are the AI coach for "${circle.name}" (${circle.goal_description}). 1-2 sentences, no markdown, use their name.`,
             messages: history.slice(-6).map((m: any) => ({
               role: (m.is_ai ? 'assistant' : 'user') as 'user' | 'assistant',

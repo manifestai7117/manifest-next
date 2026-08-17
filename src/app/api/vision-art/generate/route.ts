@@ -24,7 +24,7 @@ async function buildPrompt(goal: any): Promise<string> {
   const styleDesc = styleMap[aesthetic] || styleMap['Bright & energetic']
 
   const sceneRes = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 250,
     messages: [{
       role: 'user',

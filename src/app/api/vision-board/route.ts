@@ -22,7 +22,7 @@ Rules:
 Example for "Become a 4.5 tennis player": ["tennis court aerial view","tennis racket yellow ball","clay tennis court lines","tennis net close up","tennis ball machine practice","outdoor tennis court sunset"]`
 
   const res = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 200,
     messages: [{ role: 'user', content: prompt }]
   })
@@ -38,7 +38,7 @@ Example for "Become a 4.5 tennis player": ["tennis court aerial view","tennis ra
 // Score an image for relevance to the goal
 async function scoreImage(imageDescription: string, goalTitle: string, query: string): Promise<number> {
   const res = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 10,
     messages: [{
       role: 'user',

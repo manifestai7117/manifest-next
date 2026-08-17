@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (!name || !goal || !category) return NextResponse.json({ error: 'Missing fields', approved: false }, { status: 400 })
 
     const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 200,
       system: `You review accountability group circle proposals. Return ONLY raw JSON: {"approved": true/false, "reason": "brief explanation"}.
       

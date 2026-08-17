@@ -102,7 +102,7 @@ export async function GET(request: Request) {
     try {
       const avgMood = (checkins.reduce((a: number, c: any) => a + c.mood, 0) / checkins.length).toFixed(1)
       const res = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001', max_tokens: 80,
+        model: 'claude-haiku-4-5', max_tokens: 80,
         messages: [{ role: 'user', content: `Goal: "${goal.title}". Progress: ${goal.progress}%. Streak: ${goal.streak} days. Avg mood last ${checkins.length} days: ${avgMood}/5. Write 1 specific insight in 1-2 sentences. Be direct and actionable. No generic advice.` }]
       })
       const insight = res.content[0].type === 'text' ? res.content[0].text.trim() : ''

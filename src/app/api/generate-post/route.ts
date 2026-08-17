@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   try {
     const { rewardTitle, rewardEmoji, goalTitle, rewardDescription } = await request.json()
     const res = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-4-5',
       max_tokens: 120,
       messages: [{
         role: 'user',

@@ -165,7 +165,7 @@ FORMAT RULES — CRITICAL:
 - Sound like a real person, not an AI assistant`
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 600,
       system: systemPrompt,
       messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
@@ -184,7 +184,7 @@ FORMAT RULES — CRITICAL:
     if (goalId && goal && (count || 0) > 0 && (count || 0) % 10 === 0) {
       try {
         const summaryRes = await anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
+          model: 'claude-haiku-4-5',
           max_tokens: 200,
           messages: [{
             role: 'user',
